@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
 import { Alert, Button, Input, PasswordInput, Tabs } from '../../components/ui.jsx';
@@ -30,8 +30,9 @@ function AuthBanner({ title, subtitle }) {
 
 // ─── Auth forms ───────────────────────────────────────────────────
 function LoginForm({ onShowRegister }) {
-  const { loginStudent }   = useAuth();
-  const { students }       = useApp();
+  const { loginStudent, loginAdmin } = useAuth();
+  const { students, adminUsername, adminPassword } = useApp();
+  const navigate = useNavigate();
   const [username, setU]   = useState('');
   const [password, setP]   = useState('');
   const [error, setError]  = useState('');
@@ -43,6 +44,12 @@ function LoginForm({ onShowRegister }) {
     if (!username.trim() || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
     setTimeout(() => {
+      // Silent admin check — no visible difference to the user
+      if (username.trim() === adminUsername && password === adminPassword) {
+        loginAdmin();
+        navigate('/admin', { replace: true });
+        return;
+      }
       const found = students.find(s => s.username === username.trim() && s.password === password);
       if (!found) { setError('Incorrect username or password.'); setLoading(false); return; }
       loginStudent(found);

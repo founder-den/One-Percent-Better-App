@@ -13,6 +13,7 @@ import {
   getPrograms, savePrograms, getProgramsLabel, saveProgramsLabel,
   getCollectiveTaskCount, saveCollectiveTaskCount,
   getPersonalTasbihTemplates, savePersonalTasbihTemplates,
+  getAdminUsername, saveAdminUsername,
 } from '../services/data.js';
 
 const AppContext = createContext(null);
@@ -26,6 +27,7 @@ export function AppProvider({ children }) {
   const [periods,           setPeriodsState]     = useState(getPeriods);
   const [registrationMode,  setRegModeState]     = useState(getRegistrationMode);
   const [adminPassword,     setAdminPassState]   = useState(getAdminPassword);
+  const [adminUsername,     setAdminUserState]   = useState(getAdminUsername);
   const [globalTasbihs,     setGlobalTasbihsState] = useState(getGlobalTasbihs);
   const [programs,                setProgramsState]              = useState(getPrograms);
   const [programsLabel,           setProgramsLabelState]         = useState(getProgramsLabel);
@@ -222,6 +224,11 @@ export function AppProvider({ children }) {
     setAdminPassState(pw);
   }, []);
 
+  const changeAdminUsername = useCallback((u) => {
+    saveAdminUsername(u);
+    setAdminUserState(u);
+  }, []);
+
   // ── Global Tasbih ─────────────────────────────────────
   const addGlobalTasbih = useCallback((fields) => {
     const arr = getGlobalTasbihs();
@@ -372,7 +379,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       // State
       community, groups, students, activities, periods,
-      registrationMode, adminPassword,
+      registrationMode, adminPassword, adminUsername,
       globalTasbihs, programs, programsLabel, personalTasbihTemplates,
       // Computed helpers
       findGroupById: (id) => groups.find(g => g.id === id) || null,
@@ -395,7 +402,7 @@ export function AppProvider({ children }) {
       submitDay, editSubmission, likeQuote, saveTasbih, addBonusPoints,
       addActivity, updateActivity,
       addPeriod, updatePeriod, activatePeriod, deletePeriod,
-      setRegMode, changeAdminPassword, resetAll,
+      setRegMode, changeAdminPassword, changeAdminUsername, resetAll,
       reloadAll, reloadStudents,
       // Global Tasbih mutations
       addGlobalTasbih, updateGlobalTasbih, tapGlobalTasbih, resetGlobalTasbih,

@@ -12,6 +12,7 @@ export const KEYS = {
   PERIODS:           'periods',
   REGISTRATION_MODE: 'registrationMode',
   ADMIN_PASSWORD:    'adminPassword',
+  ADMIN_USERNAME:    'adminUsername',
   ADMIN_SESSION:     'adminSession',
   CURRENT_STUDENT:   'currentStudent',
   THEME:             'theme',
@@ -148,6 +149,8 @@ export function saveRegistrationMode(m)  { safeSet(KEYS.REGISTRATION_MODE, m); }
 // ─── Admin ────────────────────────────────────────────────────────
 export function getAdminPassword()       { return safeGet(KEYS.ADMIN_PASSWORD, 'admin1'); }
 export function saveAdminPassword(p)     { safeSet(KEYS.ADMIN_PASSWORD, p); }
+export function getAdminUsername()       { return safeGet(KEYS.ADMIN_USERNAME, 'admin'); }
+export function saveAdminUsername(u)     { safeSet(KEYS.ADMIN_USERNAME, u); }
 export function getAdminSession()        { return safeGet(KEYS.ADMIN_SESSION, false); }
 export function setAdminSession(v)       { safeSet(KEYS.ADMIN_SESSION, v); }
 export function clearAdminSession()      { localStorage.removeItem(KEYS.ADMIN_SESSION); }
@@ -221,8 +224,9 @@ export function initApp() {
     if (migrateCommunity(c)) saveCommunity(c);
   }
 
-  // Admin password
+  // Admin credentials
   if (localStorage.getItem(KEYS.ADMIN_PASSWORD) === null) saveAdminPassword('admin1');
+  if (localStorage.getItem(KEYS.ADMIN_USERNAME) === null) saveAdminUsername('admin');
 
   // Registration mode
   if (localStorage.getItem(KEYS.REGISTRATION_MODE) === null) saveRegistrationMode('open');
