@@ -96,7 +96,8 @@ export function generateId() {
 }
 
 // ─── Theme ────────────────────────────────────────────────────────
-export function getTheme()       { return safeGet(KEYS.THEME, 'dark'); }
+// Default is light — only dark if user has previously saved 'dark'
+export function getTheme()       { return safeGet(KEYS.THEME, 'light'); }
 export function saveTheme(t)     { safeSet(KEYS.THEME, t); }
 
 // ─── Community ────────────────────────────────────────────────────
@@ -209,8 +210,8 @@ function migrateCommunity(c) {
 
 // ─── initApp: run on every app start ─────────────────────────────
 export function initApp() {
-  // Theme
-  if (localStorage.getItem(KEYS.THEME) === null) saveTheme('dark');
+  // Theme — default light for new visitors
+  if (localStorage.getItem(KEYS.THEME) === null) saveTheme('light');
 
   // Community
   if (localStorage.getItem(KEYS.COMMUNITY) === null) {

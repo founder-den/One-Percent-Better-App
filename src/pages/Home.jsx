@@ -1,13 +1,23 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { useApp }  from '../context/AppContext.jsx';
-import { Logo }    from '../components/ui.jsx';
+import { useAuth }  from '../context/AuthContext.jsx';
+import { useApp }   from '../context/AppContext.jsx';
+import { useTheme } from '../context/ThemeContext.jsx';
+
+const FEATURES = [
+  { icon: '📋', title: 'Daily Activities',  desc: 'Track your daily Islamic and personal habits every day.' },
+  { icon: '🏆', title: 'Leaderboard',       desc: 'Compete with your group and stay motivated to keep going.' },
+  { icon: '📿', title: 'Global Tasbih',     desc: 'Count together with your entire community as one.' },
+  { icon: '📚', title: 'Reading Tracker',   desc: 'Track the books you are reading and share your progress.' },
+  { icon: '🌙', title: 'Programs',          desc: 'Join special night programs and community events.' },
+  { icon: '🔥', title: 'Streaks',           desc: 'Build consistency with daily streaks and stay on track.' },
+];
 
 export default function Home() {
-  const { student }    = useAuth();
-  const { community }  = useApp();
-  const navigate       = useNavigate();
+  const { student }   = useAuth();
+  const { community } = useApp();
+  const { theme }     = useTheme();
+  const navigate      = useNavigate();
 
   // Auto-redirect active logged-in students to dashboard
   useEffect(() => {
@@ -16,55 +26,110 @@ export default function Home() {
     }
   }, [student, navigate]);
 
+  // Pick banner: prefer theme-specific, fall back to generic banner
+  const bannerSrc = theme === 'dark'
+    ? (community?.bannerDark  || community?.banner || null)
+    : (community?.bannerLight || community?.banner || null);
+
+  // Logo src
+  const logoSrc = theme === 'dark' ? '/logo-dark.png' : '/logo-light.png';
+
+  // Gradient fallback for banner
+  const bannerGradient = theme === 'dark'
+    ? 'linear-gradient(135deg, #0d1f0d 0%, #0f2a1a 40%, #0c1c10 100%)'
+    : 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 40%, #dcedc8 100%)';
+
   return (
-    <div
-      className="min-h-[calc(100vh-56px)] flex flex-col items-center justify-center text-center px-6 py-16"
-      style={{
-        background: [
-          'radial-gradient(ellipse at 15% 50%, rgba(201,168,76,0.07) 0%, transparent 55%)',
-          'radial-gradient(ellipse at 85% 20%, rgba(201,168,76,0.05) 0%, transparent 50%)',
-          'radial-gradient(ellipse at 50% 80%, rgba(201,168,76,0.03) 0%, transparent 60%)',
-        ].join(', '),
-      }}
-    >
-      {/* Animated ornament */}
-      <div className="text-4xl text-gold animate-breathe mb-8 select-none">✦</div>
+    <div className="min-h-[calc(100vh-56px)]">
 
-      {/* Large logo */}
-      <div className="mb-6 flex justify-center">
-        <Logo size="lg" communityLogo={community?.logo} />
+      {/* ── Banner ──────────────────────────────────────────── */}
+      <div
+        className="relative w-full flex items-center justify-center overflow-hidden"
+        style={{
+          height: 'clamp(200px, 30vw, 280px)',
+          background: bannerSrc ? undefined : bannerGradient,
+        }}
+      >
+        {bannerSrc && (
+          <img
+            src={bannerSrc}
+            alt="Community banner"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        {/* Overlay to ensure logo visibility */}
+        <div className="absolute inset-0 bg-black/20" />
+
+        {/* Centered logo */}
+        <div className="relative z-10 flex flex-col items-center gap-3">
+          <img
+            src={logoSrc}
+            alt="1% Better"
+            style={{ height: '80px', width: 'auto', display: 'block' }}
+            className="drop-shadow-lg"
+          />
+        </div>
       </div>
 
-      <h1 className="font-serif text-4xl md:text-6xl font-bold text-primary mb-4 leading-tight">
-        1% <span className="text-gold">Better</span> Challenge
-      </h1>
-
-      <p className="text-muted text-lg max-w-sm mx-auto mb-10 leading-relaxed">
-        Build better habits. <span className="text-primary font-medium">Together.</span>
-      </p>
-
-      {community?.name && (
-        <p className="text-gold/70 text-sm font-medium mb-8">{community.name}</p>
-      )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={() => navigate('/student?register=1')}
-          className="px-7 py-3.5 bg-gold text-bg font-semibold rounded-xl hover:bg-gold-l transition-all shadow-gold text-sm"
-        >
-          Join a Group
-        </button>
-        <button
-          onClick={() => navigate('/student')}
-          className="px-7 py-3.5 border border-gold-d text-gold rounded-xl hover:bg-[var(--gold-subtle)] transition-all text-sm"
-        >
-          Sign In
-        </button>
+      {/* ── About section ───────────────────────────────────── */}
+      <div className="bg-bg px-6 py-14 text-center">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="font-serif text-4xl md:text-5xl font-bold text-primary mb-3 leading-tight">
+            1% Better Challenge
+          </h1>
+          <p className="text-lg font-medium text-gold mb-5">
+            Build better habits. Together.
+          </p>
+          <p className="text-muted text-base leading-relaxed max-w-lg mx-auto">
+            Join your community in a daily challenge to become 1% better every day.
+            Track your habits, compete with friends, and grow together.
+          </p>
+        </div>
       </div>
 
-      <p className="text-xs text-muted mt-10 opacity-50">
-        Already have an account? Click Sign In above.
-      </p>
+      {/* ── Features grid ───────────────────────────────────── */}
+      <div className="bg-bg-card border-t border-border px-6 py-12">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="font-serif text-2xl text-primary text-center mb-8">
+            Everything you need
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {FEATURES.map(f => (
+              <div
+                key={f.title}
+                className="bg-bg border border-border rounded-xl p-5 flex flex-col gap-2 hover:border-gold/40 transition-colors"
+              >
+                <span className="text-3xl">{f.icon}</span>
+                <p className="font-semibold text-primary text-sm">{f.title}</p>
+                <p className="text-xs text-muted leading-relaxed">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── CTA section ─────────────────────────────────────── */}
+      <div className="bg-bg border-t border-border px-6 py-16 text-center">
+        <div className="max-w-sm mx-auto">
+          <h2 className="font-serif text-2xl text-primary mb-2">Ready to start?</h2>
+          <p className="text-muted text-sm mb-8">Join your group and begin your journey today.</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => navigate('/student?register=1')}
+              className="px-8 py-3.5 bg-gold text-bg font-semibold rounded-xl hover:bg-gold-l transition-all shadow-gold text-sm"
+            >
+              Join a Group
+            </button>
+            <button
+              onClick={() => navigate('/student')}
+              className="px-8 py-3.5 border border-gold-d text-gold rounded-xl hover:bg-[var(--gold-subtle)] transition-all text-sm"
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
