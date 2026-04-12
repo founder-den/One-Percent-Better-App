@@ -46,7 +46,7 @@ export default function Home() {
       <div
         className="relative w-full flex items-center justify-center overflow-hidden"
         style={{
-          height: 'clamp(200px, 30vw, 280px)',
+          height: 'clamp(150px, 18.3vw, 220px)',
           background: bannerSrc ? undefined : bannerGradient,
         }}
       >
@@ -54,7 +54,7 @@ export default function Home() {
           <img
             src={bannerSrc}
             alt="Community banner"
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover object-center"
           />
         )}
         {/* Overlay to ensure logo visibility */}
