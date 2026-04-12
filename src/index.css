@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Light mode (default) ────────────────────────── */
+:root {
+  --bg:         #f5f4f0;
+  --bg-card:    #ffffff;
+  --bg-card2:   #f0efeb;
+  --surface:    #e8e7e2;
+  --text:       #1a1a2e;
+  --text-muted: #6b7280;
+  --border:     #e2e1dc;
+  --gold:       #2D6A4F;
+  --gold-light: #52B788;
+  --gold-dim:   #1e4d39;
+  --gold-subtle:rgba(45,106,79,0.1);
+  --error:      #dc2626;
+  --success:    #16a34a;
+}
+
+/* ── Dark mode ───────────────────────────────────── */
+html.dark {
+  --bg:         #0c0c12;
+  --bg-card:    #141420;
+  --bg-card2:   #1b1b2a;
+  --surface:    #202033;
+  --text:       #eaeaf2;
+  --text-muted: #7a7a96;
+  --border:     #252538;
+  --gold:       #52B788;
+  --gold-light: #74c69d;
+  --gold-dim:   #2D6A4F;
+  --gold-subtle:rgba(82,183,136,0.1);
+  --error:      #d95f5f;
+  --success:    #56b88a;
+}
+
+/* ── Base ────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ── Scrollbar ───────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+/* ── Custom accent-color ─────────────────────────── */
+input[type="checkbox"] { accent-color: var(--gold); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: opacity(0.5); }
+
+/* ── Smooth transitions on theme switch ─────────── */
+.card, .btn, input, select, textarea, nav {
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+/* ── Gold gradient divider ───────────────────────── */
+.gold-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--gold-dim), transparent);
+  opacity: 0.6;
+}
+
+/* ── Pill toggle animation ───────────────────────── */
+.pill-btn { transition: background 0.18s, color 0.18s; }
+
+/* ── Rank row highlights ─────────────────────────── */
+.row-gold   { background: rgba(255,215,0,0.03); }
+.row-silver { background: rgba(192,192,192,0.025); }
+.row-bronze { background: rgba(205,127,50,0.025); }
+
+/* ── Avatar ring ─────────────────────────────────── */
+.avatar-ring { box-shadow: 0 0 0 2px var(--gold); }
+
+/* ── Tasbih button glow ──────────────────────────── */
+.tasbih-tap:active { transform: scale(0.96); }
+
+/* ── Mobile: prevent horizontal scroll ──────────── */
+html, body { overflow-x: hidden; max-width: 100vw; }
+
+/* ── Consistent tap highlight removal ───────────── */
+button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+
+/* ── Consistent input/select height ─────────────── */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+select,
+textarea { min-height: 42px; }
+
+/* ── Custom select arrow ─────────────────────────── */
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%237a7a96' d='M5 7L0.5 2.5h9z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px !important;
+}
+
+/* ── Dark mode color-scheme ──────────────────────── */
+html.dark { color-scheme: dark; }
+html.dark select option { background: var(--bg-card2); color: var(--text); }
