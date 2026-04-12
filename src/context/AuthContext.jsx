@@ -1,35 +1,40 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import {
-  getCurrentStudent, setCurrentStudent, clearCurrentStudent,
+  getSessionUsername, setSessionUsername, clearSessionUsername,
   getAdminSession, setAdminSession, clearAdminSession,
-  getStudents, saveStudents,
 } from '../services/data.js';
+import { useApp } from './AppContext.jsx';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [student, setStudentState]   = useState(() => getCurrentStudent());
-  const [isAdmin, setIsAdminState]   = useState(() => getAdminSession());
+  const { students, loading } = useApp();
+  const [studentUsername, setStudentUsername] = useState(() => getSessionUsername());
+  const [isAdmin,         setIsAdminState]    = useState(() => getAdminSession());
 
-  // ── Student auth ─────────────────────────────────────
+  // Derive student object from the students array in AppContext
+  const student = studentUsername
+    ? (students.find(s => s.username === studentUsername) || null)
+    : null;
+
+  // ── Student auth ─────────────────────────────────────────────
   const loginStudent = useCallback((s) => {
-    setCurrentStudent(s);
-    setStudentState(s);
+    setSessionUsername(s.username);
+    setStudentUsername(s.username);
   }, []);
 
   const logoutStudent = useCallback(() => {
-    clearCurrentStudent();
-    setStudentState(null);
+    clearSessionUsername();
+    setStudentUsername(null);
   }, []);
 
-  // Re-read student from localStorage (after mutations elsewhere update them)
-  const refreshStudent = useCallback(() => {
-    const s = getCurrentStudent();
-    setStudentState(s);
-    return s;
-  }, []);
+  // Re-derive student from updated students array (no-op, handled reactively above)
+  const refreshStudent = useCallback((updatedStudent) => {
+    if (updatedStudent) return updatedStudent;
+    return student;
+  }, [student]);
 
-  // ── Admin auth ───────────────────────────────────────
+  // ── Admin auth ───────────────────────────────────────────────
   const loginAdmin = useCallback(() => {
     setAdminSession(true);
     setIsAdminState(true);
@@ -44,6 +49,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       student, loginStudent, logoutStudent, refreshStudent,
       isAdmin, loginAdmin, logoutAdmin,
+      authLoading: loading,
     }}>
       {children}
     </AuthContext.Provider>

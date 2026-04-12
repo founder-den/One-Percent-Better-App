@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp }  from '../../context/AppContext.jsx';
 import { Card, SectionHeading, EmptyState, Button, Avatar, Badge } from '../../components/ui.jsx';
-import { getReadingBooks, saveReadingBooks, formatDate } from '../../services/data.js';
+import { formatDate } from '../../services/data.js';
 
 function ProgressBar({ value, max }) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
@@ -13,13 +13,12 @@ function ProgressBar({ value, max }) {
 }
 
 function StudentReadingCard({ student }) {
-  const [books, setBooks] = useState(() => getReadingBooks(student.username));
+  const { removeBook } = useApp();
+  const books = student.books || [];
 
-  function removeBook(bookId) {
+  function handleRemove(bookId) {
     if (!window.confirm('Remove this book from the student\'s list?')) return;
-    const updated = books.filter(b => b.id !== bookId);
-    saveReadingBooks(student.username, updated);
-    setBooks(updated);
+    removeBook(student.id, bookId);
   }
 
   if (books.length === 0) return null;
@@ -51,7 +50,7 @@ function StudentReadingCard({ student }) {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Badge variant={b.status === 'Finished' ? 'success' : 'muted'}>{b.status}</Badge>
-                  <Button size="xs" variant="danger" onClick={() => removeBook(b.id)}>Remove</Button>
+                  <Button size="xs" variant="danger" onClick={() => handleRemove(b.id)}>Remove</Button>
                 </div>
               </div>
               <ProgressBar value={b.currentPage} max={b.totalPages} />
@@ -69,10 +68,9 @@ function StudentReadingCard({ student }) {
 export default function ReadingTrackerAdminTab() {
   const { students } = useApp();
 
-  const activeStudents = students.filter(s => (s.status || 'active') === 'active');
-
-  // Check which students have any books
-  const studentsWithBooks = activeStudents.filter(s => getReadingBooks(s.username).length > 0);
+  const studentsWithBooks = students
+    .filter(s => (s.status || 'active') === 'active')
+    .filter(s => (s.books || []).length > 0);
 
   return (
     <div className="space-y-5 max-w-2xl">

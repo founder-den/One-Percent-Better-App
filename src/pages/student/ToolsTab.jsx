@@ -2,13 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
 import { Card, Button, SectionHeading, Input, Modal, Alert, Avatar, Badge } from '../../components/ui.jsx';
-import {
-  todayString, formatDate,
-  getReadingBooks, saveReadingBooks,
-  getProgramCompletions, saveProgramCompletions,
-  getCollectiveTaskCount,
-  getPersonalTplProgress, savePersonalTplProgress,
-} from '../../services/data.js';
+import { todayString, formatDate } from '../../services/data.js';
 
 // ─── Shared: progress bar ─────────────────────────────────────────
 function ProgressBar({ value, max, className = '' }) {
@@ -57,7 +51,8 @@ function lastUpdatedLabel(dateStr) {
 
 // ─── Admin template goal tracker ─────────────────────────────────
 function PersonalTemplateGoal({ template, student }) {
-  const [data, setData] = useState(() => getPersonalTplProgress(student.username, template.id));
+  const { getPersonalTplProgress, savePersonalTplProgress } = useApp();
+  const [data, setData] = useState(() => getPersonalTplProgress(student.id, template.id));
   const [celebration, setCelebration] = useState('');
 
   const count  = data.count || 0;
@@ -68,8 +63,8 @@ function PersonalTemplateGoal({ template, student }) {
   function tap(n) {
     const newCount = count + n;
     const newData = { count: newCount };
-    savePersonalTplProgress(student.username, template.id, newData);
     setData(newData);
+    savePersonalTplProgress(student.id, template.id, newData);
     if (!isDone && newCount >= target) {
       setCelebration('MashAllah! Goal reached! 🎉');
       setTimeout(() => setCelebration(''), 4000);
@@ -78,8 +73,8 @@ function PersonalTemplateGoal({ template, student }) {
 
   function reset() {
     const newData = { count: 0 };
-    savePersonalTplProgress(student.username, template.id, newData);
     setData(newData);
+    savePersonalTplProgress(student.id, template.id, newData);
     setCelebration('');
   }
 
@@ -446,19 +441,15 @@ function OtherReadersRow({ student, books }) {
 }
 
 export function ReadingTrackerSection({ student, groupmates }) {
-  const [books, setBooks]               = useState(() => getReadingBooks(student.username));
+  const { addBook: ctxAddBook, updateBook: ctxUpdateBook, removeBook: ctxRemoveBook } = useApp();
+  // Books come from student.books (kept fresh by AppContext)
+  const books = student.books || [];
   const [showOthers, setShowOthers]     = useState(false);
-  const [othersData, setOthersData]     = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm]           = useState({
     title: '', author: '', startDate: todayString(), totalPages: '', currentPage: '0',
   });
   const [addErr, setAddErr] = useState('');
-
-  function persist(newBooks) {
-    setBooks(newBooks);
-    saveReadingBooks(student.username, newBooks);
-  }
 
   function addBook() {
     setAddErr('');
@@ -466,8 +457,7 @@ export function ReadingTrackerSection({ student, groupmates }) {
     const cur   = parseInt(addForm.currentPage) || 0;
     if (!addForm.title.trim())     { setAddErr('Title is required.'); return; }
     if (isNaN(total) || total < 1) { setAddErr('Enter valid total pages.'); return; }
-    const book = {
-      id:          `book_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    const bookData = {
       title:       addForm.title.trim(),
       author:      addForm.author.trim(),
       startDate:   addForm.startDate,
@@ -476,29 +466,27 @@ export function ReadingTrackerSection({ student, groupmates }) {
       lastUpdated: todayString(),
       status:      cur >= total ? 'Finished' : 'Reading',
     };
-    persist([...books, book]);
+    ctxAddBook(student.id, bookData);
     setShowAddModal(false);
     setAddForm({ title: '', author: '', startDate: todayString(), totalPages: '', currentPage: '0' });
   }
 
   function updateBook(id, fields) {
-    persist(books.map(b => b.id === id ? { ...b, ...fields } : b));
+    ctxUpdateBook(student.id, id, fields);
   }
 
   function deleteBook(id) {
     if (!window.confirm('Remove this book?')) return;
-    persist(books.filter(b => b.id !== id));
+    ctxRemoveBook(student.id, id);
   }
 
   function toggleOthers() {
-    if (!showOthers) {
-      const data = groupmates
-        .map(s => ({ student: s, books: getReadingBooks(s.username) }))
-        .filter(d => d.books.some(b => b.status === 'Reading'));
-      setOthersData(data);
-    }
     setShowOthers(v => !v);
   }
+
+  const othersData = groupmates
+    .map(s => ({ student: s, books: s.books || [] }))
+    .filter(d => d.books.some(b => b.status === 'Reading'));
 
   return (
     <Card>
@@ -603,22 +591,20 @@ function TaskTasbihCounter({ taskId, target, completion, onChange }) {
 
 // ─── Collective tasbih counter (shared across all students) ──────
 function CollectiveTasbihCounter({ task }) {
-  const { tapCollectiveTask } = useApp();
-  const [data, setData] = useState(() => getCollectiveTaskCount(task.id));
+  const { tapCollectiveTask, getCollectiveTaskCount } = useApp();
   const [celebration, setCelebration] = useState('');
 
+  // Read live from context (updated by tapCollectiveTask)
+  const data = getCollectiveTaskCount(task.id);
   const target = task.target || 100;
   const { count, completedTimes } = data;
   const pct = target > 0 ? Math.min(100, Math.round((count / target) * 100)) : 0;
 
-  function tap(n) {
-    const result = tapCollectiveTask(task.id, target, n);
-    if (result) {
-      setData({ count: result.count, completedTimes: result.completedTimes });
-      if (result.justCompleted) {
-        setCelebration(`Completed ${result.completedTimes}× ! 🎉`);
-        setTimeout(() => setCelebration(''), 4000);
-      }
+  async function tap(n) {
+    const result = await tapCollectiveTask(task.id, target, n);
+    if (result?.justCompleted) {
+      setCelebration(`Completed ${result.completedTimes}× ! 🎉`);
+      setTimeout(() => setCelebration(''), 4000);
     }
   }
 
@@ -753,11 +739,10 @@ function ProgramCard({ program, completions, onUpdateCompletion }) {
 }
 
 export function ProgramsSection({ student, groupId }) {
-  const { programs, programsLabel } = useApp();
+  const { programs, programsLabel, getStudentProgramCompletions, saveProgramCompletion } = useApp();
 
-  const [completions, setCompletions] = useState(
-    () => getProgramCompletions(student.username)
-  );
+  // Completions come from context (kept fresh by AppContext)
+  const completions = getStudentProgramCompletions(student.id);
 
   const visible = programs.filter(
     p =>
@@ -767,17 +752,10 @@ export function ProgramsSection({ student, groupId }) {
   );
 
   function updateCompletion(programId, taskId, fields) {
-    setCompletions(prev => {
-      const idx = prev.findIndex(c => c.programId === programId && c.taskId === taskId);
-      let next;
-      if (idx === -1) {
-        next = [...prev, { programId, taskId, isDone: false, count: 0, ...fields }];
-      } else {
-        next = prev.map((c, i) => (i === idx ? { ...c, ...fields } : c));
-      }
-      saveProgramCompletions(student.username, next);
-      return next;
-    });
+    const existing = completions.find(c => c.programId === programId && c.taskId === taskId);
+    const isDone = fields.isDone ?? existing?.isDone ?? false;
+    const count  = fields.count  ?? existing?.count  ?? 0;
+    saveProgramCompletion(student.id, programId, taskId, isDone, count);
   }
 
   if (visible.length === 0) {

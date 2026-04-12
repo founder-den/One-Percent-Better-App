@@ -3,7 +3,7 @@ import { useApp }  from '../../context/AppContext.jsx';
 import {
   Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge,
 } from '../../components/ui.jsx';
-import { formatDate, getProgramCompletions, getCollectiveTaskCount } from '../../services/data.js';
+import { formatDate } from '../../services/data.js';
 
 // ─── Progress bar (local) ─────────────────────────────────────────
 function ProgressBar({ value, max, className = '' }) {
@@ -81,6 +81,7 @@ function TaskRow({ task, onEdit, onDelete, onMove, isFirst, isLast }) {
 
 // ─── Completion view per program ──────────────────────────────────
 function CompletionView({ program, groups, students }) {
+  const { getCollectiveTaskCount } = useApp();
   const [filterGroupId, setFilterGroupId] = useState('all');
 
   const relevantStudents = students
@@ -148,8 +149,9 @@ function CompletionView({ program, groups, students }) {
                 /* Individual task: show per-student status */
                 <div className="space-y-1 pl-2">
                   {relevantStudents.map(s => {
-                    const comps = getProgramCompletions(s.username);
-                    const comp  = comps.find(c => c.programId === program.id && c.taskId === task.id);
+                    const comp = (s.programCompletions || []).find(
+                      c => c.programId === program.id && c.taskId === task.id
+                    );
                     const group = groups.find(g => g.id === s.groupId);
 
                     return (
