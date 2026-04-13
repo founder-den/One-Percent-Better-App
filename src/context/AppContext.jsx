@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import { generateId, todayString } from '../services/data.js';
 import {
   loadAll,
+  dbLoadCommunity, dbLoadGroups,
   dbSaveCommunity,
   dbSaveAdminSettings,
   dbAddGroup, dbUpdateGroup,
@@ -58,13 +59,18 @@ export function AppProvider({ children }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await loadAll();
-      setCommunity(data.community);
+      // Community and groups fetched directly from Supabase (fall back to localStorage)
+      const [community, groups, data] = await Promise.all([
+        dbLoadCommunity(),
+        dbLoadGroups(),
+        loadAll(),
+      ]);
+      setCommunity(community);
+      setGroups(groups);
       setAdminUsername(data.adminSettings.adminUsername);
       setAdminPassword(data.adminSettings.adminPassword);
       setRegModeState(data.adminSettings.registrationMode);
       setProgramsLabelState(data.adminSettings.programsLabel);
-      setGroups(data.groups);
       setStudents(data.students);
       setActivities(data.activities);
       setPeriods(data.periods);

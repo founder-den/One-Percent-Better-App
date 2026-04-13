@@ -51,49 +51,54 @@ function mergeStudent(row, ls = {}) {
   };
 }
 
-// ─── loadAll ──────────────────────────────────────────────────────
-// Step 1: community + groups from Supabase (fall back to localStorage).
-// Students from Supabase (merged with localStorage nested data).
-// Everything else still from localStorage.
-export async function loadAll() {
-  console.log('[db] loadAll — fetching community, groups, students from Supabase…');
-
-  // ── Community (Supabase first) ──────────────────────────────────
-  let community = lsGet('community', null);
+// ─── COMMUNITY LOAD ───────────────────────────────────────────────
+export async function dbLoadCommunity() {
+  console.log('[db] dbLoadCommunity — fetching from Supabase');
   try {
     const { data, error } = await supabase.from('communities').select('*').eq('id', 'main').maybeSingle();
     if (error) throw error;
     if (data) {
-      community = {
-        name:        data.name        || '',
-        logo:        data.logo        ?? null,
-        banner:      data.banner      ?? null,
-        bannerDark:  data.banner_dark ?? null,
+      const community = {
+        name:        data.name         || '',
+        logo:        data.logo         ?? null,
+        banner:      data.banner       ?? null,
+        bannerDark:  data.banner_dark  ?? null,
         bannerLight: data.banner_light ?? null,
       };
-      console.log('[db] loadAll — community loaded from Supabase');
-    } else {
-      console.log('[db] loadAll — no community row in Supabase, using localStorage');
+      console.log('[db] ✓ dbLoadCommunity — loaded from Supabase');
+      return community;
     }
+    console.log('[db] dbLoadCommunity — no row in Supabase, falling back to localStorage');
   } catch (e) {
-    console.error('[db] loadAll — community Supabase error, falling back to localStorage:', e);
+    console.error('[db] dbLoadCommunity — Supabase error, falling back to localStorage:', e);
   }
+  return lsGet('community', null);
+}
 
-  // ── Groups (Supabase first) ────────────────────────────────────
-  let groups = lsGet('groups', []);
+// ─── GROUPS LOAD ──────────────────────────────────────────────────
+export async function dbLoadGroups() {
+  console.log('[db] dbLoadGroups — fetching from Supabase');
   try {
     const { data, error } = await supabase.from('groups').select('*');
     if (error) throw error;
     if (data && data.length > 0) {
-      groups = data.map(r => ({ id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active }));
+      const groups = data.map(r => ({ id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active }));
       lsSave('groups', groups); // keep localStorage in sync
-      console.log(`[db] loadAll — ${groups.length} groups loaded from Supabase`);
-    } else {
-      console.log('[db] loadAll — no groups in Supabase, using localStorage');
+      console.log(`[db] ✓ dbLoadGroups — ${groups.length} groups loaded from Supabase`);
+      return groups;
     }
+    console.log('[db] dbLoadGroups — no rows in Supabase, falling back to localStorage');
   } catch (e) {
-    console.error('[db] loadAll — groups Supabase error, falling back to localStorage:', e);
+    console.error('[db] dbLoadGroups — Supabase error, falling back to localStorage:', e);
   }
+  return lsGet('groups', []);
+}
+
+// ─── loadAll ──────────────────────────────────────────────────────
+export async function loadAll() {
+  console.log('[db] loadAll — loading all app data…');
+
+  const [community, groups] = await Promise.all([dbLoadCommunity(), dbLoadGroups()]);
 
   // ── Students (Supabase first, merged with localStorage nested data) ──
   let students;
