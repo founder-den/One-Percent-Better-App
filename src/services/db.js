@@ -7,12 +7,11 @@ import { supabase } from './supabase.js';
 import { generateId } from './data.js';
 
 // ─── Error helper ─────────────────────────────────────────────────
-function must(data, error, label) {
-  if (error) {
-    console.error(`[db] ${label}:`, error.message);
-    throw new Error(error.message);
-  }
-  return data;
+// Logs full error details and returns whether the operation succeeded.
+function logErr(label, error) {
+  if (!error) return false;
+  console.error(`[db] ${label} — code: ${error.code}, message: ${error.message}`, error);
+  return true;
 }
 
 // ─── Shape converters ─────────────────────────────────────────────
@@ -46,7 +45,7 @@ function rowToStudent(r) {
     avatar: r.avatar || null,
     tasbih: r.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personalTasbihProgress: r.personal_tasbih_progress || {},
-    // These get attached after fetching related rows:
+    // Populated after join:
     submissions: [],
     bonusPoints: [],
     books: [],
@@ -115,28 +114,27 @@ function rowToProgram(r, tasksMap) {
 }
 
 // ─── LOAD ALL ─────────────────────────────────────────────────────
-// Fetches everything from Supabase and assembles the full app state.
 export async function loadAll() {
   const [
-    { data: communityRows, error: e1 },
-    { data: adminRows,     error: e2 },
-    { data: groupRows,     error: e3 },
-    { data: studentRows,   error: e4 },
-    { data: activityRows,  error: e5 },
-    { data: periodRows,    error: e6 },
-    { data: subRows,       error: e7 },
-    { data: quoteRows,     error: e8 },
-    { data: likeRows,      error: e9 },
-    { data: bonusRows,     error: e10 },
-    { data: globalRows,    error: e11 },
-    { data: personalRows,  error: e12 },
-    { data: bookRows,      error: e13 },
-    { data: programRows,   error: e14 },
-    { data: taskRows,      error: e15 },
-    { data: completionRows,error: e16 },
+    { data: communityRow,   error: e1 },
+    { data: adminRow,       error: e2 },
+    { data: groupRows,      error: e3 },
+    { data: studentRows,    error: e4 },
+    { data: activityRows,   error: e5 },
+    { data: periodRows,     error: e6 },
+    { data: subRows,        error: e7 },
+    { data: quoteRows,      error: e8 },
+    { data: likeRows,       error: e9 },
+    { data: bonusRows,      error: e10 },
+    { data: globalRows,     error: e11 },
+    { data: personalRows,   error: e12 },
+    { data: bookRows,       error: e13 },
+    { data: programRows,    error: e14 },
+    { data: taskRows,       error: e15 },
+    { data: completionRows, error: e16 },
   ] = await Promise.all([
-    supabase.from('communities').select('*').eq('id', 'main').single(),
-    supabase.from('admin_settings').select('*').eq('id', 'main').single(),
+    supabase.from('communities').select('*').eq('id', 'main').maybeSingle(),
+    supabase.from('admin_settings').select('*').eq('id', 'main').maybeSingle(),
     supabase.from('groups').select('*'),
     supabase.from('students').select('*'),
     supabase.from('activities').select('*'),
@@ -153,11 +151,29 @@ export async function loadAll() {
     supabase.from('program_completions').select('*'),
   ]);
 
-  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14,e15,e16].forEach((e, i) => {
-    if (e) console.error(`[db] loadAll error at index ${i}:`, e.message);
+  // Detect critical failures — table missing (42P01) or auth failure (42501)
+  const criticalErrors = [e3, e4, e5].filter(Boolean);
+  for (const err of criticalErrors) {
+    if (err.code === '42P01') {
+      throw new Error(
+        'Database tables not found. Please run the SQL setup script in your Supabase SQL editor.'
+      );
+    }
+    if (err.code === '42501' || err.message?.includes('row-level security')) {
+      throw new Error(
+        'Database permission denied. Run: ALTER TABLE groups DISABLE ROW LEVEL SECURITY; (and the same for all other tables).'
+      );
+    }
+    // Generic critical error
+    throw new Error(`Database error: ${err.message}`);
+  }
+
+  // Log non-critical errors (missing singleton rows are OK)
+  [e1, e2, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16].forEach((e, i) => {
+    if (e) console.warn(`[db] loadAll non-critical error at index ${i}:`, e.message);
   });
 
-  // Build lookup maps for O(1) assembly
+  // Build lookup maps
   const quotesMap = {};
   (quoteRows || []).forEach(q => { quotesMap[`${q.student_id}|${q.date}`] = q; });
 
@@ -201,7 +217,7 @@ export async function loadAll() {
     }
   });
 
-  // Build collective task counts map from taskRows
+  // Collective task counts from task rows
   const collectiveTaskCounts = {};
   (taskRows || []).forEach(t => {
     collectiveTaskCounts[t.id] = {
@@ -211,42 +227,43 @@ export async function loadAll() {
   });
 
   return {
-    community: communityRows ? {
-      name:        communityRows.name,
-      logo:        communityRows.logo        || null,
-      banner:      communityRows.banner      || null,
-      bannerDark:  communityRows.banner_dark  || null,
-      bannerLight: communityRows.banner_light || null,
+    community: communityRow ? {
+      name:        communityRow.name,
+      logo:        communityRow.logo         || null,
+      banner:      communityRow.banner       || null,
+      bannerDark:  communityRow.banner_dark  || null,
+      bannerLight: communityRow.banner_light || null,
     } : { name: 'My Community', logo: null, banner: null, bannerDark: null, bannerLight: null },
 
-    adminSettings: adminRows ? {
-      adminUsername:    adminRows.admin_username,
-      adminPassword:    adminRows.admin_password,
-      registrationMode: adminRows.registration_mode,
-      programsLabel:    adminRows.programs_label,
+    adminSettings: adminRow ? {
+      adminUsername:    adminRow.admin_username,
+      adminPassword:    adminRow.admin_password,
+      registrationMode: adminRow.registration_mode,
+      programsLabel:    adminRow.programs_label,
     } : { adminUsername: 'admin', adminPassword: 'admin1', registrationMode: 'open', programsLabel: 'Programs' },
 
-    groups:               (groupRows    || []).map(rowToGroup),
+    groups:                  (groupRows    || []).map(rowToGroup),
     students,
-    activities:           (activityRows || []).map(rowToActivity),
-    periods:              (periodRows   || []).map(rowToPeriod),
-    globalTasbihs:        (globalRows   || []).map(rowToGlobalTasbih),
+    activities:              (activityRows || []).map(rowToActivity),
+    periods:                 (periodRows   || []).map(rowToPeriod),
+    globalTasbihs:           (globalRows   || []).map(rowToGlobalTasbih),
     personalTasbihTemplates: (personalRows || []).map(rowToPersonalTemplate),
-    programs:             (programRows  || []).map(r => rowToProgram(r, tasksMap)),
+    programs:                (programRows  || []).map(r => rowToProgram(r, tasksMap)),
     collectiveTaskCounts,
   };
 }
 
 // ─── COMMUNITY ────────────────────────────────────────────────────
 export async function dbSaveCommunity(fields) {
-  const { error } = await supabase.from('communities').update({
-    name:         fields.name,
-    logo:         fields.logo         ?? null,
-    banner:       fields.banner       ?? null,
-    banner_dark:  fields.bannerDark   ?? null,
-    banner_light: fields.bannerLight  ?? null,
-  }).eq('id', 'main');
-  if (error) console.error('[db] saveCommunity:', error.message);
+  const { error } = await supabase.from('communities').upsert({
+    id:          'main',
+    name:        fields.name,
+    logo:        fields.logo        ?? null,
+    banner:      fields.banner      ?? null,
+    banner_dark:  fields.bannerDark  ?? null,
+    banner_light: fields.bannerLight ?? null,
+  }, { onConflict: 'id' });
+  logErr('saveCommunity', error);
 }
 
 // ─── ADMIN SETTINGS ───────────────────────────────────────────────
@@ -256,8 +273,10 @@ export async function dbSaveAdminSettings(fields) {
   if (fields.adminPassword    !== undefined) update.admin_password    = fields.adminPassword;
   if (fields.registrationMode !== undefined) update.registration_mode = fields.registrationMode;
   if (fields.programsLabel    !== undefined) update.programs_label    = fields.programsLabel;
-  const { error } = await supabase.from('admin_settings').update(update).eq('id', 'main');
-  if (error) console.error('[db] saveAdminSettings:', error.message);
+  const { error } = await supabase.from('admin_settings').upsert(
+    { id: 'main', ...update }, { onConflict: 'id' }
+  );
+  logErr('saveAdminSettings', error);
 }
 
 // ─── GROUPS ───────────────────────────────────────────────────────
@@ -265,7 +284,7 @@ export async function dbAddGroup(group) {
   const { error } = await supabase.from('groups').insert({
     id: group.id, name: group.name, group_code: group.groupCode, is_active: group.isActive ?? true,
   });
-  if (error) console.error('[db] addGroup:', error.message);
+  logErr('addGroup', error);
 }
 
 export async function dbUpdateGroup(id, fields) {
@@ -274,7 +293,7 @@ export async function dbUpdateGroup(id, fields) {
   if (fields.groupCode !== undefined) update.group_code = fields.groupCode;
   if (fields.isActive  !== undefined) update.is_active  = fields.isActive;
   const { error } = await supabase.from('groups').update(update).eq('id', id);
-  if (error) console.error('[db] updateGroup:', error.message);
+  logErr('updateGroup', error);
 }
 
 // ─── ACTIVITIES ───────────────────────────────────────────────────
@@ -283,15 +302,18 @@ export async function dbAddActivity(activity) {
     id: activity.id, group_id: activity.groupId,
     name: activity.name, points: activity.points, is_active: activity.isActive ?? true,
   });
-  if (error) console.error('[db] addActivity:', error.message);
+  logErr('addActivity', error);
 }
 
 export async function dbAddActivities(activities) {
   if (!activities.length) return;
   const { error } = await supabase.from('activities').insert(
-    activities.map(a => ({ id: a.id, group_id: a.groupId, name: a.name, points: a.points, is_active: a.isActive ?? true }))
+    activities.map(a => ({
+      id: a.id, group_id: a.groupId, name: a.name,
+      points: a.points, is_active: a.isActive ?? true,
+    }))
   );
-  if (error) console.error('[db] addActivities:', error.message);
+  logErr('addActivities', error);
 }
 
 export async function dbUpdateActivity(id, fields) {
@@ -300,7 +322,7 @@ export async function dbUpdateActivity(id, fields) {
   if (fields.points   !== undefined) update.points    = fields.points;
   if (fields.isActive !== undefined) update.is_active = fields.isActive;
   const { error } = await supabase.from('activities').update(update).eq('id', id);
-  if (error) console.error('[db] updateActivity:', error.message);
+  logErr('updateActivity', error);
 }
 
 // ─── PERIODS ──────────────────────────────────────────────────────
@@ -312,37 +334,34 @@ export async function dbAddPeriod(period) {
     count_for_all_time: period.countForAllTime ?? false,
     prize_text: period.prizeText ?? '',
   });
-  if (error) console.error('[db] addPeriod:', error.message);
+  logErr('addPeriod', error);
 }
 
 export async function dbUpdatePeriod(id, fields) {
   const update = {};
-  if (fields.name             !== undefined) update.name               = fields.name;
-  if (fields.startDate        !== undefined) update.start_date         = fields.startDate;
-  if (fields.endDate          !== undefined) update.end_date           = fields.endDate;
-  if (fields.isActive         !== undefined) update.is_active          = fields.isActive;
-  if (fields.countForAllTime  !== undefined) update.count_for_all_time = fields.countForAllTime;
-  if (fields.prizeText        !== undefined) update.prize_text         = fields.prizeText;
+  if (fields.name            !== undefined) update.name               = fields.name;
+  if (fields.startDate       !== undefined) update.start_date         = fields.startDate;
+  if (fields.endDate         !== undefined) update.end_date           = fields.endDate;
+  if (fields.isActive        !== undefined) update.is_active          = fields.isActive;
+  if (fields.countForAllTime !== undefined) update.count_for_all_time = fields.countForAllTime;
+  if (fields.prizeText       !== undefined) update.prize_text         = fields.prizeText;
   const { error } = await supabase.from('periods').update(update).eq('id', id);
-  if (error) console.error('[db] updatePeriod:', error.message);
+  logErr('updatePeriod', error);
 }
 
 export async function dbDeletePeriod(id) {
   const { error } = await supabase.from('periods').delete().eq('id', id);
-  if (error) console.error('[db] deletePeriod:', error.message);
+  logErr('deletePeriod', error);
 }
 
-// Deactivate all periods for a group, then activate the specified one
 export async function dbActivatePeriod(id, groupId) {
   const { error: e1 } = await supabase.from('periods')
-    .update({ is_active: false })
-    .eq('group_id', groupId);
-  if (e1) console.error('[db] activatePeriod deactivate:', e1.message);
+    .update({ is_active: false }).eq('group_id', groupId);
+  logErr('activatePeriod/deactivate', e1);
 
   const { error: e2 } = await supabase.from('periods')
-    .update({ is_active: true })
-    .eq('id', id);
-  if (e2) console.error('[db] activatePeriod activate:', e2.message);
+    .update({ is_active: true }).eq('id', id);
+  logErr('activatePeriod/activate', e2);
 }
 
 // ─── STUDENTS ─────────────────────────────────────────────────────
@@ -361,79 +380,126 @@ export async function dbRegisterStudent(student) {
     tasbih:                   student.tasbih,
     personal_tasbih_progress: student.personalTasbihProgress || {},
   });
-  if (error) console.error('[db] registerStudent:', error.message);
+  logErr('registerStudent', error);
+  return !error;
 }
 
 export async function dbUpdateStudent(id, fields) {
   const update = {};
-  if (fields.fullName               !== undefined) update.full_name                 = fields.fullName;
-  if (fields.username               !== undefined) update.username                  = fields.username;
-  if (fields.password               !== undefined) update.password                  = fields.password;
-  if (fields.groupId                !== undefined) update.group_id                  = fields.groupId;
-  if (fields.secondaryGroupIds      !== undefined) update.secondary_group_ids       = fields.secondaryGroupIds;
-  if (fields.status                 !== undefined) update.status                    = fields.status;
-  if (fields.university             !== undefined) update.university                = fields.university;
-  if (fields.phone                  !== undefined) update.phone                     = fields.phone;
-  if (fields.avatar                 !== undefined) update.avatar                    = fields.avatar;
-  if (fields.tasbih                 !== undefined) update.tasbih                    = fields.tasbih;
-  if (fields.personalTasbihProgress !== undefined) update.personal_tasbih_progress  = fields.personalTasbihProgress;
+  if (fields.fullName               !== undefined) update.full_name                = fields.fullName;
+  if (fields.username               !== undefined) update.username                 = fields.username;
+  if (fields.password               !== undefined) update.password                 = fields.password;
+  if (fields.groupId                !== undefined) update.group_id                 = fields.groupId;
+  if (fields.secondaryGroupIds      !== undefined) update.secondary_group_ids      = fields.secondaryGroupIds;
+  if (fields.status                 !== undefined) update.status                   = fields.status;
+  if (fields.university             !== undefined) update.university               = fields.university;
+  if (fields.phone                  !== undefined) update.phone                    = fields.phone;
+  if (fields.avatar                 !== undefined) update.avatar                   = fields.avatar;
+  if (fields.tasbih                 !== undefined) update.tasbih                   = fields.tasbih;
+  if (fields.personalTasbihProgress !== undefined) update.personal_tasbih_progress = fields.personalTasbihProgress;
   if (!Object.keys(update).length) return;
   const { error } = await supabase.from('students').update(update).eq('id', id);
-  if (error) console.error('[db] updateStudent:', error.message);
+  logErr('updateStudent', error);
 }
 
 export async function dbDeleteStudent(id) {
   const { error } = await supabase.from('students').delete().eq('id', id);
-  if (error) console.error('[db] deleteStudent:', error.message);
+  logErr('deleteStudent', error);
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-// Upserts submission + quote rows together
+// FIX: use insert/update instead of upsert+new-id to avoid PK mutation.
 export async function dbSubmitDay(studentId, dateStr, completedActivities, quoteText) {
-  const subId = generateId();
-  const { error: e1 } = await supabase.from('submissions').upsert({
-    id: subId, student_id: studentId, date: dateStr,
-    completed_activities: completedActivities,
-  }, { onConflict: 'student_id,date', ignoreDuplicates: false });
-  if (e1) console.error('[db] submitDay submission:', e1.message);
+  // Check if submission already exists for this student+date
+  const { data: existing, error: se } = await supabase.from('submissions')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('date', dateStr)
+    .maybeSingle();
+  if (se) { logErr('submitDay/check', se); }
+
+  if (existing) {
+    const { error } = await supabase.from('submissions')
+      .update({ completed_activities: completedActivities })
+      .eq('id', existing.id);
+    logErr('submitDay/update-submission', error);
+  } else {
+    const { error } = await supabase.from('submissions').insert({
+      id: generateId(), student_id: studentId, date: dateStr,
+      completed_activities: completedActivities,
+    });
+    logErr('submitDay/insert-submission', error);
+  }
 
   if (quoteText) {
-    const { error: e2 } = await supabase.from('quotes').upsert({
-      id: generateId(), student_id: studentId, date: dateStr, text: quoteText,
-    }, { onConflict: 'student_id,date', ignoreDuplicates: false });
-    if (e2) console.error('[db] submitDay quote:', e2.message);
+    const { data: existingQuote, error: qe } = await supabase.from('quotes')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('date', dateStr)
+      .maybeSingle();
+    if (qe) { logErr('submitDay/check-quote', qe); }
+
+    if (existingQuote) {
+      const { error } = await supabase.from('quotes')
+        .update({ text: quoteText })
+        .eq('id', existingQuote.id);
+      logErr('submitDay/update-quote', error);
+    } else {
+      const { error } = await supabase.from('quotes').insert({
+        id: generateId(), student_id: studentId, date: dateStr, text: quoteText,
+      });
+      logErr('submitDay/insert-quote', error);
+    }
   }
 }
 
 export async function dbEditSubmission(studentId, dateStr, completedActivities) {
-  const { error } = await supabase.from('submissions')
-    .update({ completed_activities: completedActivities })
+  // Try update first; if no rows exist, insert instead
+  const { data: existing, error: ce } = await supabase.from('submissions')
+    .select('id')
     .eq('student_id', studentId)
-    .eq('date', dateStr);
-  if (error) console.error('[db] editSubmission:', error.message);
+    .eq('date', dateStr)
+    .maybeSingle();
+  if (ce) { logErr('editSubmission/check', ce); }
+
+  if (existing) {
+    const { error } = await supabase.from('submissions')
+      .update({ completed_activities: completedActivities })
+      .eq('id', existing.id);
+    logErr('editSubmission/update', error);
+  } else {
+    const { error } = await supabase.from('submissions').insert({
+      id: generateId(), student_id: studentId, date: dateStr,
+      completed_activities: completedActivities,
+    });
+    logErr('editSubmission/insert', error);
+  }
 }
 
 // ─── QUOTE LIKES ──────────────────────────────────────────────────
 export async function dbToggleQuoteLike(studentId, dateStr, likerId) {
-  // Look up the quote
   const { data: quote, error: qe } = await supabase.from('quotes')
     .select('id')
     .eq('student_id', studentId)
     .eq('date', dateStr)
     .maybeSingle();
-  if (qe || !quote) return;
+  if (qe || !quote) { logErr('toggleQuoteLike/find-quote', qe); return; }
 
-  // Check if like exists
-  const { data: existing } = await supabase.from('quote_likes')
+  const { data: existing, error: le } = await supabase.from('quote_likes')
     .select('id')
     .eq('quote_id', quote.id)
     .eq('liker_id', likerId)
     .maybeSingle();
+  if (le) { logErr('toggleQuoteLike/check', le); }
 
   if (existing) {
-    await supabase.from('quote_likes').delete().eq('id', existing.id);
+    const { error } = await supabase.from('quote_likes').delete().eq('id', existing.id);
+    logErr('toggleQuoteLike/delete', error);
   } else {
-    await supabase.from('quote_likes').insert({ id: generateId(), quote_id: quote.id, liker_id: likerId });
+    const { error } = await supabase.from('quote_likes').insert({
+      id: generateId(), quote_id: quote.id, liker_id: likerId,
+    });
+    logErr('toggleQuoteLike/insert', error);
   }
 }
 
@@ -442,12 +508,15 @@ export async function dbAddBonusPoints(studentId, date, points, reason) {
   const { error } = await supabase.from('bonus_points').insert({
     id: generateId(), student_id: studentId, date, points: Number(points), reason,
   });
-  if (error) console.error('[db] addBonusPoints:', error.message);
+  logErr('addBonusPoints', error);
 }
 
-// ─── TASBIH (student personal) ────────────────────────────────────
+// ─── STUDENT TASBIH ───────────────────────────────────────────────
 export async function dbUpdateTasbih(studentId, tasbih) {
-  return dbUpdateStudent(studentId, { tasbih });
+  const { error } = await supabase.from('students')
+    .update({ tasbih })
+    .eq('id', studentId);
+  logErr('updateTasbih', error);
 }
 
 // ─── GLOBAL TASBIH ────────────────────────────────────────────────
@@ -457,7 +526,7 @@ export async function dbAddGlobalTasbih(t) {
     target: t.target, current: 0, completed_times: 0,
     is_active: t.isActive ?? true, group_scope: t.groupScope,
   });
-  if (error) console.error('[db] addGlobalTasbih:', error.message);
+  logErr('addGlobalTasbih', error);
 }
 
 export async function dbUpdateGlobalTasbih(id, fields) {
@@ -470,7 +539,7 @@ export async function dbUpdateGlobalTasbih(id, fields) {
   if (fields.isActive       !== undefined) update.is_active       = fields.isActive;
   if (fields.groupScope     !== undefined) update.group_scope     = fields.groupScope;
   const { error } = await supabase.from('tasbih_global').update(update).eq('id', id);
-  if (error) console.error('[db] updateGlobalTasbih:', error.message);
+  logErr('updateGlobalTasbih', error);
 }
 
 // ─── PERSONAL TASBIH TEMPLATES ────────────────────────────────────
@@ -479,7 +548,7 @@ export async function dbAddPersonalTemplate(t) {
     id: t.id, title: t.title, description: t.description,
     target: t.target, group_scope: t.groupScope, is_active: t.isActive ?? true,
   });
-  if (error) console.error('[db] addPersonalTemplate:', error.message);
+  logErr('addPersonalTemplate', error);
 }
 
 export async function dbUpdatePersonalTemplate(id, fields) {
@@ -490,28 +559,20 @@ export async function dbUpdatePersonalTemplate(id, fields) {
   if (fields.groupScope  !== undefined) update.group_scope = fields.groupScope;
   if (fields.isActive    !== undefined) update.is_active   = fields.isActive;
   const { error } = await supabase.from('tasbih_personal').update(update).eq('id', id);
-  if (error) console.error('[db] updatePersonalTemplate:', error.message);
+  logErr('updatePersonalTemplate', error);
 }
 
 export async function dbDeletePersonalTemplate(id) {
   const { error } = await supabase.from('tasbih_personal').delete().eq('id', id);
-  if (error) console.error('[db] deletePersonalTemplate:', error.message);
+  logErr('deletePersonalTemplate', error);
 }
 
-// Personal tasbih progress is stored on the student record as JSONB
-export async function dbSavePersonalTplProgress(studentId, templateId, count) {
-  // We need to merge into the existing JSONB — read current, then update
-  const { data, error: re } = await supabase.from('students')
-    .select('personal_tasbih_progress')
-    .eq('id', studentId)
-    .single();
-  if (re) { console.error('[db] getPersonalTplProgress:', re.message); return; }
-  const current = data?.personal_tasbih_progress || {};
-  const updated = { ...current, [templateId]: count };
+// FIX: accept the full progress object from AppContext state — no pre-read needed.
+export async function dbSavePersonalTplProgress(studentId, fullProgress) {
   const { error } = await supabase.from('students')
-    .update({ personal_tasbih_progress: updated })
+    .update({ personal_tasbih_progress: fullProgress })
     .eq('id', studentId);
-  if (error) console.error('[db] savePersonalTplProgress:', error.message);
+  logErr('savePersonalTplProgress', error);
 }
 
 // ─── READING BOOKS ────────────────────────────────────────────────
@@ -523,34 +584,34 @@ export async function dbAddBook(studentId, book) {
     current_page: book.currentPage || 0, status: book.status || 'Reading',
     last_updated: book.lastUpdated || '',
   });
-  if (error) console.error('[db] addBook:', error.message);
+  logErr('addBook', error);
 }
 
 export async function dbUpdateBook(bookId, fields) {
   const update = {};
-  if (fields.title        !== undefined) update.title         = fields.title;
-  if (fields.author       !== undefined) update.author        = fields.author;
-  if (fields.startDate    !== undefined) update.start_date    = fields.startDate;
-  if (fields.totalPages   !== undefined) update.total_pages   = fields.totalPages;
-  if (fields.currentPage  !== undefined) update.current_page  = fields.currentPage;
-  if (fields.status       !== undefined) update.status        = fields.status;
-  if (fields.lastUpdated  !== undefined) update.last_updated  = fields.lastUpdated;
+  if (fields.title       !== undefined) update.title        = fields.title;
+  if (fields.author      !== undefined) update.author       = fields.author;
+  if (fields.startDate   !== undefined) update.start_date   = fields.startDate;
+  if (fields.totalPages  !== undefined) update.total_pages  = fields.totalPages;
+  if (fields.currentPage !== undefined) update.current_page = fields.currentPage;
+  if (fields.status      !== undefined) update.status       = fields.status;
+  if (fields.lastUpdated !== undefined) update.last_updated = fields.lastUpdated;
   const { error } = await supabase.from('reading_books').update(update).eq('id', bookId);
-  if (error) console.error('[db] updateBook:', error.message);
+  logErr('updateBook', error);
 }
 
 export async function dbDeleteBook(bookId) {
   const { error } = await supabase.from('reading_books').delete().eq('id', bookId);
-  if (error) console.error('[db] deleteBook:', error.message);
+  logErr('deleteBook', error);
 }
 
 // ─── PROGRAMS ─────────────────────────────────────────────────────
 export async function dbAddProgram(program) {
-  const { error: pe } = await supabase.from('programs').insert({
+  const { error } = await supabase.from('programs').insert({
     id: program.id, name: program.name, description: program.description || '',
     date: program.date || '', group_scope: program.groupScope, is_active: program.isActive ?? true,
   });
-  if (pe) console.error('[db] addProgram:', pe.message);
+  logErr('addProgram', error);
 }
 
 export async function dbUpdateProgram(id, fields) {
@@ -561,37 +622,55 @@ export async function dbUpdateProgram(id, fields) {
   if (fields.groupScope  !== undefined) update.group_scope = fields.groupScope;
   if (fields.isActive    !== undefined) update.is_active   = fields.isActive;
   if (fields.tasks !== undefined) {
-    // Replace all tasks for this program
-    await supabase.from('program_tasks').delete().eq('program_id', id);
+    // Delete existing tasks then re-insert
+    const { error: de } = await supabase.from('program_tasks').delete().eq('program_id', id);
+    logErr('updateProgram/delete-tasks', de);
     if (fields.tasks.length) {
-      await supabase.from('program_tasks').insert(
+      const { error: ie } = await supabase.from('program_tasks').insert(
         fields.tasks.map((t, i) => ({
-          id: t.id, program_id: id, type: t.type, description: t.description,
+          id: t.id || generateId(),
+          program_id: id, type: t.type, description: t.description,
           target: t.target || 100, task_order: t.order ?? i, mode: t.mode || 'individual',
           collective_count: t.collectiveCount || 0,
           collective_completed_times: t.collectiveCompletedTimes || 0,
         }))
       );
+      logErr('updateProgram/insert-tasks', ie);
     }
   }
   if (Object.keys(update).length) {
     const { error } = await supabase.from('programs').update(update).eq('id', id);
-    if (error) console.error('[db] updateProgram:', error.message);
+    logErr('updateProgram', error);
   }
 }
 
 export async function dbDeleteProgram(id) {
   const { error } = await supabase.from('programs').delete().eq('id', id);
-  if (error) console.error('[db] deleteProgram:', error.message);
+  logErr('deleteProgram', error);
 }
 
 // ─── PROGRAM COMPLETIONS ──────────────────────────────────────────
+// FIX: use insert/update instead of upsert+new-id to avoid PK mutation.
 export async function dbSaveProgramCompletion(studentId, programId, taskId, isDone, count) {
-  const { error } = await supabase.from('program_completions').upsert({
-    id: generateId(), student_id: studentId, program_id: programId,
-    task_id: taskId, is_done: isDone, count,
-  }, { onConflict: 'student_id,task_id', ignoreDuplicates: false });
-  if (error) console.error('[db] saveProgramCompletion:', error.message);
+  const { data: existing, error: ce } = await supabase.from('program_completions')
+    .select('id')
+    .eq('student_id', studentId)
+    .eq('task_id', taskId)
+    .maybeSingle();
+  if (ce) { logErr('saveProgramCompletion/check', ce); }
+
+  if (existing) {
+    const { error } = await supabase.from('program_completions')
+      .update({ is_done: isDone, count })
+      .eq('id', existing.id);
+    logErr('saveProgramCompletion/update', error);
+  } else {
+    const { error } = await supabase.from('program_completions').insert({
+      id: generateId(), student_id: studentId, program_id: programId,
+      task_id: taskId, is_done: isDone, count,
+    });
+    logErr('saveProgramCompletion/insert', error);
+  }
 }
 
 // ─── COLLECTIVE TASK COUNTS ───────────────────────────────────────
@@ -599,18 +678,14 @@ export async function dbUpdateCollectiveTask(taskId, count, completedTimes) {
   const { error } = await supabase.from('program_tasks')
     .update({ collective_count: count, collective_completed_times: completedTimes })
     .eq('id', taskId);
-  if (error) console.error('[db] updateCollectiveTask:', error.message);
+  logErr('updateCollectiveTask', error);
 }
 
 // ─── REALTIME SUBSCRIPTIONS ───────────────────────────────────────
-// Returns an unsubscribe function
 export function subscribeToGlobalTasbihs(onUpdate) {
   const channel = supabase
     .channel('global-tasbihs')
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'tasbih_global' },
-      (payload) => onUpdate(payload)
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasbih_global' }, onUpdate)
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
@@ -618,10 +693,7 @@ export function subscribeToGlobalTasbihs(onUpdate) {
 export function subscribeToStudents(onUpdate) {
   const channel = supabase
     .channel('students-changes')
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'students' },
-      (payload) => onUpdate(payload)
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, onUpdate)
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
@@ -629,10 +701,7 @@ export function subscribeToStudents(onUpdate) {
 export function subscribeToSubmissions(onUpdate) {
   const channel = supabase
     .channel('submissions-changes')
-    .on('postgres_changes',
-      { event: '*', schema: 'public', table: 'submissions' },
-      (payload) => onUpdate(payload)
-    )
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, onUpdate)
     .subscribe();
   return () => supabase.removeChannel(channel);
 }

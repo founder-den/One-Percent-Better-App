@@ -302,26 +302,23 @@ export function AppProvider({ children }) {
   }, []);
 
   const tapGlobalTasbih = useCallback(async (id, amount) => {
-    let result = null;
-    setGlobalTasbihs(prev => {
-      const idx = prev.findIndex(t => t.id === id);
-      if (idx === -1) return prev;
-      const t = prev[idx];
-      if (!t.isActive) return prev;
-      let newCurrent = t.current + amount;
-      let newCompleted = t.completedTimes;
-      let justCompleted = false;
-      if (newCurrent >= t.target) { newCompleted += 1; newCurrent = 0; justCompleted = true; }
-      const updated = { ...t, current: newCurrent, completedTimes: newCompleted };
-      result = { tasbih: updated, justCompleted, completedTimes: newCompleted };
-      const next = [...prev];
-      next[idx] = updated;
-      // Fire-and-forget Supabase update
-      dbUpdateGlobalTasbih(id, { current: newCurrent, completedTimes: newCompleted });
-      return next;
-    });
-    return result;
-  }, []);
+    // Read current values from state directly to avoid stale closure
+    const current = globalTasbihs.find(t => t.id === id);
+    if (!current || !current.isActive) return null;
+
+    let newCurrent = current.current + amount;
+    let newCompleted = current.completedTimes;
+    let justCompleted = false;
+    if (newCurrent >= current.target) { newCompleted += 1; newCurrent = 0; justCompleted = true; }
+
+    const updated = { ...current, current: newCurrent, completedTimes: newCompleted };
+    setGlobalTasbihs(prev => prev.map(t => t.id === id ? updated : t));
+
+    // Write to Supabase after updating state (not inside the setter)
+    await dbUpdateGlobalTasbih(id, { current: newCurrent, completedTimes: newCompleted });
+
+    return { tasbih: updated, justCompleted, completedTimes: newCompleted };
+  }, [globalTasbihs]);
 
   const resetGlobalTasbih = useCallback(async (id) => {
     setGlobalTasbihs(t => t.map(x => x.id === id ? { ...x, current: 0 } : x));
@@ -361,14 +358,15 @@ export function AppProvider({ children }) {
   }, [students]);
 
   const savePersonalTplProgress = useCallback(async (studentId, templateId, data) => {
+    // Compute the merged object before the state update so we can pass it to db
+    let mergedProgress = {};
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
-      return {
-        ...st,
-        personalTasbihProgress: { ...(st.personalTasbihProgress || {}), [templateId]: data.count },
-      };
+      mergedProgress = { ...(st.personalTasbihProgress || {}), [templateId]: data.count };
+      return { ...st, personalTasbihProgress: mergedProgress };
     }));
-    await dbSavePersonalTplProgress(studentId, templateId, data.count);
+    // Pass the full merged object — no pre-read in db.js needed
+    await dbSavePersonalTplProgress(studentId, mergedProgress);
   }, []);
 
   // ── Reading Books ─────────────────────────────────────────────
@@ -448,19 +446,19 @@ export function AppProvider({ children }) {
 
   // ── Collective Task Counts ────────────────────────────────────
   const tapCollectiveTask = useCallback(async (taskId, target, amount) => {
-    let result = null;
-    setCollectiveCounts(prev => {
-      const current = prev[taskId] || { count: 0, completedTimes: 0 };
-      let count = current.count + amount;
-      let completedTimes = current.completedTimes;
-      let justCompleted = false;
-      if (count >= target) { completedTimes += 1; count = 0; justCompleted = true; }
-      result = { count, completedTimes, justCompleted };
-      dbUpdateCollectiveTask(taskId, count, completedTimes);
-      return { ...prev, [taskId]: { count, completedTimes } };
-    });
-    return result;
-  }, []);
+    const current = collectiveTaskCounts[taskId] || { count: 0, completedTimes: 0 };
+    let count = current.count + amount;
+    let completedTimes = current.completedTimes;
+    let justCompleted = false;
+    if (count >= target) { completedTimes += 1; count = 0; justCompleted = true; }
+
+    setCollectiveCounts(prev => ({ ...prev, [taskId]: { count, completedTimes } }));
+
+    // Write to Supabase after updating state (not inside the setter)
+    await dbUpdateCollectiveTask(taskId, count, completedTimes);
+
+    return { count, completedTimes, justCompleted };
+  }, [collectiveTaskCounts]);
 
   const resetCollectiveTask = useCallback(async (taskId) => {
     setCollectiveCounts(prev => ({ ...prev, [taskId]: { count: 0, completedTimes: 0 } }));
