@@ -1,20 +1,28 @@
 // ─────────────────────────────────────────────────────────────────
-//  db.js — all async Supabase operations
-//  Returns data in the same shapes the app already expects (camelCase).
+//  db.js — Supabase is the SINGLE source of truth.
+//
+//  Return contract:
+//    INSERT functions → return the confirmed row (camelCase) or null on failure
+//    UPDATE / DELETE functions → return true on success, false on failure
+//    loadAll → returns assembled state object or throws
 // ─────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase.js';
 import { generateId } from './data.js';
 
-// ─── Error helper ─────────────────────────────────────────────────
-// Logs full error details and returns whether the operation succeeded.
+// ─── Logging helpers ──────────────────────────────────────────────
+function logSuccess(label, detail) {
+  console.log(`[db] ✓ ${label}`, detail ?? '');
+}
+
+// Logs full error object; returns true if there was an error.
 function logErr(label, error) {
   if (!error) return false;
-  console.error(`[db] ${label} — code: ${error.code}, message: ${error.message}`, error);
+  console.error(`[db] ✗ ${label} — code: ${error.code}, message: ${error.message}`, error);
   return true;
 }
 
-// ─── Shape converters ─────────────────────────────────────────────
+// ─── Shape converters (DB row → app camelCase) ────────────────────
 function rowToGroup(r) {
   return { id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active };
 }
@@ -31,6 +39,9 @@ function rowToPeriod(r) {
   };
 }
 
+// rowToStudent does NOT attach submissions/bonusPoints/books/programCompletions —
+// those are joined in loadAll. When returning a freshly-inserted student, the
+// caller attaches empty arrays.
 function rowToStudent(r) {
   return {
     id: r.id,
@@ -45,36 +56,14 @@ function rowToStudent(r) {
     avatar: r.avatar || null,
     tasbih: r.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personalTasbihProgress: r.personal_tasbih_progress || {},
-    // Populated after join:
-    submissions: [],
-    bonusPoints: [],
-    books: [],
-    programCompletions: [],
-  };
-}
-
-function rowToSubmission(r, quotesMap, likesMap) {
-  const quote = quotesMap[`${r.student_id}|${r.date}`] || null;
-  const quoteLikes = quote ? (likesMap[quote.id] || []) : [];
-  return {
-    _id: r.id,
-    date: r.date,
-    completedActivities: r.completed_activities || [],
-    quote: quote ? quote.text : '',
-    quoteId: quote ? quote.id : null,
-    quoteLikes,
   };
 }
 
 function rowToBook(r) {
   return {
-    id: r.id,
-    title: r.title,
-    author: r.author || '',
-    startDate: r.start_date || '',
-    totalPages: r.total_pages || 0,
-    currentPage: r.current_page || 0,
-    status: r.status || 'Reading',
+    id: r.id, title: r.title, author: r.author || '',
+    startDate: r.start_date || '', totalPages: r.total_pages || 0,
+    currentPage: r.current_page || 0, status: r.status || 'Reading',
     lastUpdated: r.last_updated || '',
   };
 }
@@ -108,23 +97,26 @@ function rowToProgram(r, tasksMap) {
   tasks.sort((a, b) => a.order - b.order);
   return {
     id: r.id, name: r.name, description: r.description,
-    date: r.date, groupScope: r.group_scope, isActive: r.is_active,
-    tasks,
+    date: r.date, groupScope: r.group_scope, isActive: r.is_active, tasks,
   };
 }
 
 // ─── LOAD ALL ─────────────────────────────────────────────────────
+// Fetches everything from Supabase and assembles the full app state.
+// Throws on critical failures (missing tables, permission denied).
 export async function loadAll() {
+  console.log('[db] loadAll: fetching all data from Supabase…');
+
   const [
-    { data: communityRow,   error: e1 },
-    { data: adminRow,       error: e2 },
-    { data: groupRows,      error: e3 },
-    { data: studentRows,    error: e4 },
-    { data: activityRows,   error: e5 },
-    { data: periodRows,     error: e6 },
-    { data: subRows,        error: e7 },
-    { data: quoteRows,      error: e8 },
-    { data: likeRows,       error: e9 },
+    { data: communityRow,   error: e1  },
+    { data: adminRow,       error: e2  },
+    { data: groupRows,      error: e3  },
+    { data: studentRows,    error: e4  },
+    { data: activityRows,   error: e5  },
+    { data: periodRows,     error: e6  },
+    { data: subRows,        error: e7  },
+    { data: quoteRows,      error: e8  },
+    { data: likeRows,       error: e9  },
     { data: bonusRows,      error: e10 },
     { data: globalRows,     error: e11 },
     { data: personalRows,   error: e12 },
@@ -151,29 +143,29 @@ export async function loadAll() {
     supabase.from('program_completions').select('*'),
   ]);
 
-  // Detect critical failures — table missing (42P01) or auth failure (42501)
-  const criticalErrors = [e3, e4, e5].filter(Boolean);
-  for (const err of criticalErrors) {
+  // Critical tables: groups, students, activities — if these fail the app cannot run
+  for (const err of [e3, e4, e5].filter(Boolean)) {
     if (err.code === '42P01') {
       throw new Error(
-        'Database tables not found. Please run the SQL setup script in your Supabase SQL editor.'
+        'Database tables not found. Run the SQL setup script in your Supabase SQL editor.'
       );
     }
     if (err.code === '42501' || err.message?.includes('row-level security')) {
       throw new Error(
-        'Database permission denied. Run: ALTER TABLE groups DISABLE ROW LEVEL SECURITY; (and the same for all other tables).'
+        'Permission denied. In Supabase SQL editor run:\n' +
+        'ALTER TABLE students DISABLE ROW LEVEL SECURITY;\n' +
+        '(and the same for all other tables)'
       );
     }
-    // Generic critical error
-    throw new Error(`Database error: ${err.message}`);
+    throw new Error(`Database error loading data: ${err.message}`);
   }
 
-  // Log non-critical errors (missing singleton rows are OK)
+  // Log non-critical errors (singleton rows may simply not exist yet)
   [e1, e2, e6, e7, e8, e9, e10, e11, e12, e13, e14, e15, e16].forEach((e, i) => {
-    if (e) console.warn(`[db] loadAll non-critical error at index ${i}:`, e.message);
+    if (e) console.warn(`[db] loadAll non-critical error index ${i + 1}:`, e.message);
   });
 
-  // Build lookup maps
+  // Build lookup maps for O(1) assembly
   const quotesMap = {};
   (quoteRows || []).forEach(q => { quotesMap[`${q.student_id}|${q.date}`] = q; });
 
@@ -189,15 +181,25 @@ export async function loadAll() {
     tasksMap[t.program_id].push(t);
   });
 
-  // Assemble students with related data
-  const students = (studentRows || []).map(r => rowToStudent(r));
+  // Assemble students with their related rows
+  const students = (studentRows || []).map(r => ({
+    ...rowToStudent(r),
+    submissions: [], bonusPoints: [], books: [], programCompletions: [],
+  }));
   const studentById = {};
   students.forEach(s => { studentById[s.id] = s; });
 
   (subRows || []).forEach(r => {
-    if (studentById[r.student_id]) {
-      studentById[r.student_id].submissions.push(rowToSubmission(r, quotesMap, likesMap));
-    }
+    if (!studentById[r.student_id]) return;
+    const quote = quotesMap[`${r.student_id}|${r.date}`] || null;
+    const quoteLikes = quote ? (likesMap[quote.id] || []) : [];
+    studentById[r.student_id].submissions.push({
+      _id: r.id, date: r.date,
+      completedActivities: r.completed_activities || [],
+      quote: quote ? quote.text : '',
+      quoteId: quote ? quote.id : null,
+      quoteLikes,
+    });
   });
   (bonusRows || []).forEach(r => {
     if (studentById[r.student_id]) {
@@ -217,7 +219,7 @@ export async function loadAll() {
     }
   });
 
-  // Collective task counts from task rows
+  // Collective task counts from program_tasks rows
   const collectiveTaskCounts = {};
   (taskRows || []).forEach(t => {
     collectiveTaskCounts[t.id] = {
@@ -226,15 +228,22 @@ export async function loadAll() {
     };
   });
 
+  console.log(
+    `[db] loadAll: success — ${students.length} students, ${(groupRows||[]).length} groups, ` +
+    `${(activityRows||[]).length} activities, ${(programRows||[]).length} programs`
+  );
+
   return {
+    // community is null if no row exists — no mock data
     community: communityRow ? {
       name:        communityRow.name,
       logo:        communityRow.logo         || null,
       banner:      communityRow.banner       || null,
       bannerDark:  communityRow.banner_dark  || null,
       bannerLight: communityRow.banner_light || null,
-    } : { name: 'My Community', logo: null, banner: null, bannerDark: null, bannerLight: null },
+    } : null,
 
+    // adminSettings falls back to defaults so the app stays functional
     adminSettings: adminRow ? {
       adminUsername:    adminRow.admin_username,
       adminPassword:    adminRow.admin_password,
@@ -255,89 +264,112 @@ export async function loadAll() {
 
 // ─── COMMUNITY ────────────────────────────────────────────────────
 export async function dbSaveCommunity(fields) {
+  console.log('[db] saveCommunity:', fields);
   const { error } = await supabase.from('communities').upsert({
-    id:          'main',
-    name:        fields.name,
-    logo:        fields.logo        ?? null,
-    banner:      fields.banner      ?? null,
-    banner_dark:  fields.bannerDark  ?? null,
-    banner_light: fields.bannerLight ?? null,
+    id:           'main',
+    name:         fields.name         || '',
+    logo:         fields.logo         ?? null,
+    banner:       fields.banner       ?? null,
+    banner_dark:  fields.bannerDark   ?? null,
+    banner_light: fields.bannerLight  ?? null,
   }, { onConflict: 'id' });
-  logErr('saveCommunity', error);
+  if (logErr('saveCommunity', error)) return false;
+  logSuccess('saveCommunity');
+  return true;
 }
 
 // ─── ADMIN SETTINGS ───────────────────────────────────────────────
 export async function dbSaveAdminSettings(fields) {
-  const update = {};
-  if (fields.adminUsername    !== undefined) update.admin_username    = fields.adminUsername;
-  if (fields.adminPassword    !== undefined) update.admin_password    = fields.adminPassword;
-  if (fields.registrationMode !== undefined) update.registration_mode = fields.registrationMode;
-  if (fields.programsLabel    !== undefined) update.programs_label    = fields.programsLabel;
-  const { error } = await supabase.from('admin_settings').upsert(
-    { id: 'main', ...update }, { onConflict: 'id' }
-  );
-  logErr('saveAdminSettings', error);
+  console.log('[db] saveAdminSettings:', Object.keys(fields));
+  const row = { id: 'main' };
+  if (fields.adminUsername    !== undefined) row.admin_username    = fields.adminUsername;
+  if (fields.adminPassword    !== undefined) row.admin_password    = fields.adminPassword;
+  if (fields.registrationMode !== undefined) row.registration_mode = fields.registrationMode;
+  if (fields.programsLabel    !== undefined) row.programs_label    = fields.programsLabel;
+  const { error } = await supabase.from('admin_settings').upsert(row, { onConflict: 'id' });
+  if (logErr('saveAdminSettings', error)) return false;
+  logSuccess('saveAdminSettings', Object.keys(fields));
+  return true;
 }
 
 // ─── GROUPS ───────────────────────────────────────────────────────
 export async function dbAddGroup(group) {
-  const { error } = await supabase.from('groups').insert({
+  console.log('[db] addGroup:', group.name);
+  const { data, error } = await supabase.from('groups').insert({
     id: group.id, name: group.name, group_code: group.groupCode, is_active: group.isActive ?? true,
-  });
-  logErr('addGroup', error);
+  }).select().single();
+  if (logErr('addGroup', error)) return null;
+  logSuccess('addGroup', data.id);
+  return rowToGroup(data);
 }
 
 export async function dbUpdateGroup(id, fields) {
+  console.log('[db] updateGroup:', id, fields);
   const update = {};
   if (fields.name      !== undefined) update.name       = fields.name;
   if (fields.groupCode !== undefined) update.group_code = fields.groupCode;
   if (fields.isActive  !== undefined) update.is_active  = fields.isActive;
   const { error } = await supabase.from('groups').update(update).eq('id', id);
-  logErr('updateGroup', error);
+  if (logErr('updateGroup', error)) return false;
+  logSuccess('updateGroup', id);
+  return true;
 }
 
 // ─── ACTIVITIES ───────────────────────────────────────────────────
 export async function dbAddActivity(activity) {
-  const { error } = await supabase.from('activities').insert({
+  console.log('[db] addActivity:', activity.name);
+  const { data, error } = await supabase.from('activities').insert({
     id: activity.id, group_id: activity.groupId,
     name: activity.name, points: activity.points, is_active: activity.isActive ?? true,
-  });
-  logErr('addActivity', error);
+  }).select().single();
+  if (logErr('addActivity', error)) return null;
+  logSuccess('addActivity', data.id);
+  return rowToActivity(data);
 }
 
 export async function dbAddActivities(activities) {
-  if (!activities.length) return;
-  const { error } = await supabase.from('activities').insert(
+  if (!activities.length) return [];
+  console.log('[db] addActivities:', activities.length, 'rows');
+  const { data, error } = await supabase.from('activities').insert(
     activities.map(a => ({
       id: a.id, group_id: a.groupId, name: a.name,
       points: a.points, is_active: a.isActive ?? true,
     }))
-  );
-  logErr('addActivities', error);
+  ).select();
+  if (logErr('addActivities', error)) return null;
+  logSuccess('addActivities', `${(data||[]).length} inserted`);
+  return (data || []).map(rowToActivity);
 }
 
 export async function dbUpdateActivity(id, fields) {
+  console.log('[db] updateActivity:', id, fields);
   const update = {};
   if (fields.name     !== undefined) update.name      = fields.name;
   if (fields.points   !== undefined) update.points    = fields.points;
   if (fields.isActive !== undefined) update.is_active = fields.isActive;
   const { error } = await supabase.from('activities').update(update).eq('id', id);
-  logErr('updateActivity', error);
+  if (logErr('updateActivity', error)) return false;
+  logSuccess('updateActivity', id);
+  return true;
 }
 
 // ─── PERIODS ──────────────────────────────────────────────────────
 export async function dbAddPeriod(period) {
-  const { error } = await supabase.from('periods').insert({
+  console.log('[db] addPeriod:', period.name);
+  const { data, error } = await supabase.from('periods').insert({
     id: period.id, group_id: period.groupId, name: period.name,
     start_date: period.startDate, end_date: period.endDate,
     is_active: period.isActive ?? false,
     count_for_all_time: period.countForAllTime ?? false,
     prize_text: period.prizeText ?? '',
-  });
-  logErr('addPeriod', error);
+  }).select().single();
+  if (logErr('addPeriod', error)) return null;
+  logSuccess('addPeriod', data.id);
+  return rowToPeriod(data);
 }
 
 export async function dbUpdatePeriod(id, fields) {
+  console.log('[db] updatePeriod:', id, fields);
   const update = {};
   if (fields.name            !== undefined) update.name               = fields.name;
   if (fields.startDate       !== undefined) update.start_date         = fields.startDate;
@@ -346,27 +378,36 @@ export async function dbUpdatePeriod(id, fields) {
   if (fields.countForAllTime !== undefined) update.count_for_all_time = fields.countForAllTime;
   if (fields.prizeText       !== undefined) update.prize_text         = fields.prizeText;
   const { error } = await supabase.from('periods').update(update).eq('id', id);
-  logErr('updatePeriod', error);
+  if (logErr('updatePeriod', error)) return false;
+  logSuccess('updatePeriod', id);
+  return true;
 }
 
 export async function dbDeletePeriod(id) {
+  console.log('[db] deletePeriod:', id);
   const { error } = await supabase.from('periods').delete().eq('id', id);
-  logErr('deletePeriod', error);
+  if (logErr('deletePeriod', error)) return false;
+  logSuccess('deletePeriod', id);
+  return true;
 }
 
 export async function dbActivatePeriod(id, groupId) {
+  console.log('[db] activatePeriod:', id, 'for group', groupId);
   const { error: e1 } = await supabase.from('periods')
     .update({ is_active: false }).eq('group_id', groupId);
-  logErr('activatePeriod/deactivate', e1);
-
+  if (logErr('activatePeriod/deactivate-all', e1)) return false;
   const { error: e2 } = await supabase.from('periods')
     .update({ is_active: true }).eq('id', id);
-  logErr('activatePeriod/activate', e2);
+  if (logErr('activatePeriod/activate', e2)) return false;
+  logSuccess('activatePeriod', id);
+  return true;
 }
 
 // ─── STUDENTS ─────────────────────────────────────────────────────
+// Returns the confirmed student row (without relation arrays) or null on failure.
 export async function dbRegisterStudent(student) {
-  const { error } = await supabase.from('students').insert({
+  console.log('[db] registerStudent:', student.username, '— groupId:', student.groupId);
+  const { data, error } = await supabase.from('students').insert({
     id:                       student.id,
     full_name:                student.fullName,
     username:                 student.username,
@@ -379,12 +420,14 @@ export async function dbRegisterStudent(student) {
     avatar:                   student.avatar || null,
     tasbih:                   student.tasbih,
     personal_tasbih_progress: student.personalTasbihProgress || {},
-  });
-  logErr('registerStudent', error);
-  return !error;
+  }).select().single();
+  if (logErr('registerStudent', error)) return null;
+  logSuccess('registerStudent', data.username);
+  return rowToStudent(data);
 }
 
 export async function dbUpdateStudent(id, fields) {
+  console.log('[db] updateStudent:', id, Object.keys(fields));
   const update = {};
   if (fields.fullName               !== undefined) update.full_name                = fields.fullName;
   if (fields.username               !== undefined) update.username                 = fields.username;
@@ -397,52 +440,49 @@ export async function dbUpdateStudent(id, fields) {
   if (fields.avatar                 !== undefined) update.avatar                   = fields.avatar;
   if (fields.tasbih                 !== undefined) update.tasbih                   = fields.tasbih;
   if (fields.personalTasbihProgress !== undefined) update.personal_tasbih_progress = fields.personalTasbihProgress;
-  if (!Object.keys(update).length) return;
+  if (!Object.keys(update).length) return true;
   const { error } = await supabase.from('students').update(update).eq('id', id);
-  logErr('updateStudent', error);
+  if (logErr('updateStudent', error)) return false;
+  logSuccess('updateStudent', id);
+  return true;
 }
 
 export async function dbDeleteStudent(id) {
+  console.log('[db] deleteStudent:', id);
   const { error } = await supabase.from('students').delete().eq('id', id);
-  logErr('deleteStudent', error);
+  if (logErr('deleteStudent', error)) return false;
+  logSuccess('deleteStudent', id);
+  return true;
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-// FIX: use insert/update instead of upsert+new-id to avoid PK mutation.
+// Uses explicit check-then-insert/update to avoid upsert PK mutation.
 export async function dbSubmitDay(studentId, dateStr, completedActivities, quoteText) {
-  // Check if submission already exists for this student+date
-  const { data: existing, error: se } = await supabase.from('submissions')
-    .select('id')
-    .eq('student_id', studentId)
-    .eq('date', dateStr)
-    .maybeSingle();
-  if (se) { logErr('submitDay/check', se); }
+  console.log('[db] submitDay:', studentId, dateStr);
+
+  const { data: existing, error: ce } = await supabase.from('submissions')
+    .select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+  if (ce) { logErr('submitDay/check', ce); return false; }
 
   if (existing) {
     const { error } = await supabase.from('submissions')
-      .update({ completed_activities: completedActivities })
-      .eq('id', existing.id);
-    logErr('submitDay/update-submission', error);
+      .update({ completed_activities: completedActivities }).eq('id', existing.id);
+    if (logErr('submitDay/update-submission', error)) return false;
   } else {
     const { error } = await supabase.from('submissions').insert({
       id: generateId(), student_id: studentId, date: dateStr,
       completed_activities: completedActivities,
     });
-    logErr('submitDay/insert-submission', error);
+    if (logErr('submitDay/insert-submission', error)) return false;
   }
 
   if (quoteText) {
-    const { data: existingQuote, error: qe } = await supabase.from('quotes')
-      .select('id')
-      .eq('student_id', studentId)
-      .eq('date', dateStr)
-      .maybeSingle();
+    const { data: existingQ, error: qe } = await supabase.from('quotes')
+      .select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
     if (qe) { logErr('submitDay/check-quote', qe); }
 
-    if (existingQuote) {
-      const { error } = await supabase.from('quotes')
-        .update({ text: quoteText })
-        .eq('id', existingQuote.id);
+    if (existingQ) {
+      const { error } = await supabase.from('quotes').update({ text: quoteText }).eq('id', existingQ.id);
       logErr('submitDay/update-quote', error);
     } else {
       const { error } = await supabase.from('quotes').insert({
@@ -451,82 +491,84 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
       logErr('submitDay/insert-quote', error);
     }
   }
+
+  logSuccess('submitDay', `${studentId} on ${dateStr}`);
+  return true;
 }
 
 export async function dbEditSubmission(studentId, dateStr, completedActivities) {
-  // Try update first; if no rows exist, insert instead
+  console.log('[db] editSubmission:', studentId, dateStr);
   const { data: existing, error: ce } = await supabase.from('submissions')
-    .select('id')
-    .eq('student_id', studentId)
-    .eq('date', dateStr)
-    .maybeSingle();
-  if (ce) { logErr('editSubmission/check', ce); }
+    .select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+  if (ce) { logErr('editSubmission/check', ce); return false; }
 
   if (existing) {
     const { error } = await supabase.from('submissions')
-      .update({ completed_activities: completedActivities })
-      .eq('id', existing.id);
-    logErr('editSubmission/update', error);
+      .update({ completed_activities: completedActivities }).eq('id', existing.id);
+    if (logErr('editSubmission/update', error)) return false;
   } else {
     const { error } = await supabase.from('submissions').insert({
       id: generateId(), student_id: studentId, date: dateStr,
       completed_activities: completedActivities,
     });
-    logErr('editSubmission/insert', error);
+    if (logErr('editSubmission/insert', error)) return false;
   }
+  logSuccess('editSubmission', `${studentId} on ${dateStr}`);
+  return true;
 }
 
 // ─── QUOTE LIKES ──────────────────────────────────────────────────
 export async function dbToggleQuoteLike(studentId, dateStr, likerId) {
+  console.log('[db] toggleQuoteLike: owner', studentId, 'date', dateStr, 'liker', likerId);
   const { data: quote, error: qe } = await supabase.from('quotes')
-    .select('id')
-    .eq('student_id', studentId)
-    .eq('date', dateStr)
-    .maybeSingle();
-  if (qe || !quote) { logErr('toggleQuoteLike/find-quote', qe); return; }
+    .select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+  if (qe || !quote) { logErr('toggleQuoteLike/find-quote', qe); return false; }
 
   const { data: existing, error: le } = await supabase.from('quote_likes')
-    .select('id')
-    .eq('quote_id', quote.id)
-    .eq('liker_id', likerId)
-    .maybeSingle();
-  if (le) { logErr('toggleQuoteLike/check', le); }
+    .select('id').eq('quote_id', quote.id).eq('liker_id', likerId).maybeSingle();
+  if (le) { logErr('toggleQuoteLike/check', le); return false; }
 
   if (existing) {
     const { error } = await supabase.from('quote_likes').delete().eq('id', existing.id);
-    logErr('toggleQuoteLike/delete', error);
+    if (logErr('toggleQuoteLike/delete', error)) return false;
   } else {
-    const { error } = await supabase.from('quote_likes').insert({
-      id: generateId(), quote_id: quote.id, liker_id: likerId,
-    });
-    logErr('toggleQuoteLike/insert', error);
+    const { error } = await supabase.from('quote_likes')
+      .insert({ id: generateId(), quote_id: quote.id, liker_id: likerId });
+    if (logErr('toggleQuoteLike/insert', error)) return false;
   }
+  logSuccess('toggleQuoteLike');
+  return true;
 }
 
 // ─── BONUS POINTS ─────────────────────────────────────────────────
 export async function dbAddBonusPoints(studentId, date, points, reason) {
-  const { error } = await supabase.from('bonus_points').insert({
+  console.log('[db] addBonusPoints:', studentId, points, reason);
+  const { data, error } = await supabase.from('bonus_points').insert({
     id: generateId(), student_id: studentId, date, points: Number(points), reason,
-  });
-  logErr('addBonusPoints', error);
+  }).select().single();
+  if (logErr('addBonusPoints', error)) return null;
+  logSuccess('addBonusPoints', `${points} pts to ${studentId}`);
+  return { id: data.id, date: data.date, points: data.points, reason: data.reason };
 }
 
 // ─── STUDENT TASBIH ───────────────────────────────────────────────
 export async function dbUpdateTasbih(studentId, tasbih) {
-  const { error } = await supabase.from('students')
-    .update({ tasbih })
-    .eq('id', studentId);
-  logErr('updateTasbih', error);
+  const { error } = await supabase.from('students').update({ tasbih }).eq('id', studentId);
+  if (logErr('updateTasbih', error)) return false;
+  return true;
 }
 
 // ─── GLOBAL TASBIH ────────────────────────────────────────────────
 export async function dbAddGlobalTasbih(t) {
-  const { error } = await supabase.from('tasbih_global').insert({
+  console.log('[db] addGlobalTasbih:', t.title);
+  const { data, error } = await supabase.from('tasbih_global').insert({
     id: t.id, title: t.title, description: t.description,
     target: t.target, current: 0, completed_times: 0,
     is_active: t.isActive ?? true, group_scope: t.groupScope,
-  });
-  logErr('addGlobalTasbih', error);
+  }).select().single();
+  if (logErr('addGlobalTasbih', error)) return null;
+  logSuccess('addGlobalTasbih', data.id);
+  return rowToGlobalTasbih(data);
 }
 
 export async function dbUpdateGlobalTasbih(id, fields) {
@@ -539,19 +581,24 @@ export async function dbUpdateGlobalTasbih(id, fields) {
   if (fields.isActive       !== undefined) update.is_active       = fields.isActive;
   if (fields.groupScope     !== undefined) update.group_scope     = fields.groupScope;
   const { error } = await supabase.from('tasbih_global').update(update).eq('id', id);
-  logErr('updateGlobalTasbih', error);
+  if (logErr('updateGlobalTasbih', error)) return false;
+  return true;
 }
 
 // ─── PERSONAL TASBIH TEMPLATES ────────────────────────────────────
 export async function dbAddPersonalTemplate(t) {
-  const { error } = await supabase.from('tasbih_personal').insert({
+  console.log('[db] addPersonalTemplate:', t.title);
+  const { data, error } = await supabase.from('tasbih_personal').insert({
     id: t.id, title: t.title, description: t.description,
     target: t.target, group_scope: t.groupScope, is_active: t.isActive ?? true,
-  });
-  logErr('addPersonalTemplate', error);
+  }).select().single();
+  if (logErr('addPersonalTemplate', error)) return null;
+  logSuccess('addPersonalTemplate', data.id);
+  return rowToPersonalTemplate(data);
 }
 
 export async function dbUpdatePersonalTemplate(id, fields) {
+  console.log('[db] updatePersonalTemplate:', id);
   const update = {};
   if (fields.title       !== undefined) update.title       = fields.title;
   if (fields.description !== undefined) update.description = fields.description;
@@ -559,35 +606,47 @@ export async function dbUpdatePersonalTemplate(id, fields) {
   if (fields.groupScope  !== undefined) update.group_scope = fields.groupScope;
   if (fields.isActive    !== undefined) update.is_active   = fields.isActive;
   const { error } = await supabase.from('tasbih_personal').update(update).eq('id', id);
-  logErr('updatePersonalTemplate', error);
+  if (logErr('updatePersonalTemplate', error)) return false;
+  logSuccess('updatePersonalTemplate', id);
+  return true;
 }
 
 export async function dbDeletePersonalTemplate(id) {
+  console.log('[db] deletePersonalTemplate:', id);
   const { error } = await supabase.from('tasbih_personal').delete().eq('id', id);
-  logErr('deletePersonalTemplate', error);
+  if (logErr('deletePersonalTemplate', error)) return false;
+  logSuccess('deletePersonalTemplate', id);
+  return true;
 }
 
-// FIX: accept the full progress object from AppContext state — no pre-read needed.
+// Accept the full merged progress object from AppContext state — no pre-read needed.
 export async function dbSavePersonalTplProgress(studentId, fullProgress) {
+  console.log('[db] savePersonalTplProgress:', studentId, fullProgress);
   const { error } = await supabase.from('students')
     .update({ personal_tasbih_progress: fullProgress })
     .eq('id', studentId);
-  logErr('savePersonalTplProgress', error);
+  if (logErr('savePersonalTplProgress', error)) return false;
+  logSuccess('savePersonalTplProgress', studentId);
+  return true;
 }
 
 // ─── READING BOOKS ────────────────────────────────────────────────
 export async function dbAddBook(studentId, book) {
-  const { error } = await supabase.from('reading_books').insert({
+  console.log('[db] addBook:', book.title, 'for student', studentId);
+  const { data, error } = await supabase.from('reading_books').insert({
     id: book.id, student_id: studentId,
     title: book.title, author: book.author || '',
     start_date: book.startDate || '', total_pages: book.totalPages || 0,
     current_page: book.currentPage || 0, status: book.status || 'Reading',
     last_updated: book.lastUpdated || '',
-  });
-  logErr('addBook', error);
+  }).select().single();
+  if (logErr('addBook', error)) return null;
+  logSuccess('addBook', data.id);
+  return rowToBook(data);
 }
 
 export async function dbUpdateBook(bookId, fields) {
+  console.log('[db] updateBook:', bookId, fields);
   const update = {};
   if (fields.title       !== undefined) update.title        = fields.title;
   if (fields.author      !== undefined) update.author       = fields.author;
@@ -597,24 +656,33 @@ export async function dbUpdateBook(bookId, fields) {
   if (fields.status      !== undefined) update.status       = fields.status;
   if (fields.lastUpdated !== undefined) update.last_updated = fields.lastUpdated;
   const { error } = await supabase.from('reading_books').update(update).eq('id', bookId);
-  logErr('updateBook', error);
+  if (logErr('updateBook', error)) return false;
+  logSuccess('updateBook', bookId);
+  return true;
 }
 
 export async function dbDeleteBook(bookId) {
+  console.log('[db] deleteBook:', bookId);
   const { error } = await supabase.from('reading_books').delete().eq('id', bookId);
-  logErr('deleteBook', error);
+  if (logErr('deleteBook', error)) return false;
+  logSuccess('deleteBook', bookId);
+  return true;
 }
 
 // ─── PROGRAMS ─────────────────────────────────────────────────────
 export async function dbAddProgram(program) {
-  const { error } = await supabase.from('programs').insert({
+  console.log('[db] addProgram:', program.name);
+  const { data, error } = await supabase.from('programs').insert({
     id: program.id, name: program.name, description: program.description || '',
     date: program.date || '', group_scope: program.groupScope, is_active: program.isActive ?? true,
-  });
-  logErr('addProgram', error);
+  }).select().single();
+  if (logErr('addProgram', error)) return null;
+  logSuccess('addProgram', data.id);
+  return rowToProgram(data, {});  // new program has no tasks yet
 }
 
 export async function dbUpdateProgram(id, fields) {
+  console.log('[db] updateProgram:', id);
   const update = {};
   if (fields.name        !== undefined) update.name        = fields.name;
   if (fields.description !== undefined) update.description = fields.description;
@@ -622,9 +690,8 @@ export async function dbUpdateProgram(id, fields) {
   if (fields.groupScope  !== undefined) update.group_scope = fields.groupScope;
   if (fields.isActive    !== undefined) update.is_active   = fields.isActive;
   if (fields.tasks !== undefined) {
-    // Delete existing tasks then re-insert
     const { error: de } = await supabase.from('program_tasks').delete().eq('program_id', id);
-    logErr('updateProgram/delete-tasks', de);
+    if (logErr('updateProgram/delete-tasks', de)) return false;
     if (fields.tasks.length) {
       const { error: ie } = await supabase.from('program_tasks').insert(
         fields.tasks.map((t, i) => ({
@@ -635,42 +702,45 @@ export async function dbUpdateProgram(id, fields) {
           collective_completed_times: t.collectiveCompletedTimes || 0,
         }))
       );
-      logErr('updateProgram/insert-tasks', ie);
+      if (logErr('updateProgram/insert-tasks', ie)) return false;
     }
   }
   if (Object.keys(update).length) {
     const { error } = await supabase.from('programs').update(update).eq('id', id);
-    logErr('updateProgram', error);
+    if (logErr('updateProgram', error)) return false;
   }
+  logSuccess('updateProgram', id);
+  return true;
 }
 
 export async function dbDeleteProgram(id) {
+  console.log('[db] deleteProgram:', id);
   const { error } = await supabase.from('programs').delete().eq('id', id);
-  logErr('deleteProgram', error);
+  if (logErr('deleteProgram', error)) return false;
+  logSuccess('deleteProgram', id);
+  return true;
 }
 
 // ─── PROGRAM COMPLETIONS ──────────────────────────────────────────
-// FIX: use insert/update instead of upsert+new-id to avoid PK mutation.
 export async function dbSaveProgramCompletion(studentId, programId, taskId, isDone, count) {
+  console.log('[db] saveProgramCompletion:', taskId, { isDone, count });
   const { data: existing, error: ce } = await supabase.from('program_completions')
-    .select('id')
-    .eq('student_id', studentId)
-    .eq('task_id', taskId)
-    .maybeSingle();
-  if (ce) { logErr('saveProgramCompletion/check', ce); }
+    .select('id').eq('student_id', studentId).eq('task_id', taskId).maybeSingle();
+  if (ce) { logErr('saveProgramCompletion/check', ce); return false; }
 
   if (existing) {
     const { error } = await supabase.from('program_completions')
-      .update({ is_done: isDone, count })
-      .eq('id', existing.id);
-    logErr('saveProgramCompletion/update', error);
+      .update({ is_done: isDone, count }).eq('id', existing.id);
+    if (logErr('saveProgramCompletion/update', error)) return false;
   } else {
     const { error } = await supabase.from('program_completions').insert({
       id: generateId(), student_id: studentId, program_id: programId,
       task_id: taskId, is_done: isDone, count,
     });
-    logErr('saveProgramCompletion/insert', error);
+    if (logErr('saveProgramCompletion/insert', error)) return false;
   }
+  logSuccess('saveProgramCompletion', taskId);
+  return true;
 }
 
 // ─── COLLECTIVE TASK COUNTS ───────────────────────────────────────
@@ -678,7 +748,8 @@ export async function dbUpdateCollectiveTask(taskId, count, completedTimes) {
   const { error } = await supabase.from('program_tasks')
     .update({ collective_count: count, collective_completed_times: completedTimes })
     .eq('id', taskId);
-  logErr('updateCollectiveTask', error);
+  if (logErr('updateCollectiveTask', error)) return false;
+  return true;
 }
 
 // ─── REALTIME SUBSCRIPTIONS ───────────────────────────────────────
