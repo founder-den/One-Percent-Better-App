@@ -52,11 +52,50 @@ function mergeStudent(row, ls = {}) {
 }
 
 // ─── loadAll ──────────────────────────────────────────────────────
-// Students come from Supabase (merged with localStorage nested data).
-// Everything else comes from localStorage.
+// Step 1: community + groups from Supabase (fall back to localStorage).
+// Students from Supabase (merged with localStorage nested data).
+// Everything else still from localStorage.
 export async function loadAll() {
-  console.log('[db] loadAll — fetching students from Supabase, rest from localStorage');
+  console.log('[db] loadAll — fetching community, groups, students from Supabase…');
 
+  // ── Community (Supabase first) ──────────────────────────────────
+  let community = lsGet('community', null);
+  try {
+    const { data, error } = await supabase.from('communities').select('*').eq('id', 'main').maybeSingle();
+    if (error) throw error;
+    if (data) {
+      community = {
+        name:        data.name        || '',
+        logo:        data.logo        ?? null,
+        banner:      data.banner      ?? null,
+        bannerDark:  data.banner_dark ?? null,
+        bannerLight: data.banner_light ?? null,
+      };
+      console.log('[db] loadAll — community loaded from Supabase');
+    } else {
+      console.log('[db] loadAll — no community row in Supabase, using localStorage');
+    }
+  } catch (e) {
+    console.error('[db] loadAll — community Supabase error, falling back to localStorage:', e);
+  }
+
+  // ── Groups (Supabase first) ────────────────────────────────────
+  let groups = lsGet('groups', []);
+  try {
+    const { data, error } = await supabase.from('groups').select('*');
+    if (error) throw error;
+    if (data && data.length > 0) {
+      groups = data.map(r => ({ id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active }));
+      lsSave('groups', groups); // keep localStorage in sync
+      console.log(`[db] loadAll — ${groups.length} groups loaded from Supabase`);
+    } else {
+      console.log('[db] loadAll — no groups in Supabase, using localStorage');
+    }
+  } catch (e) {
+    console.error('[db] loadAll — groups Supabase error, falling back to localStorage:', e);
+  }
+
+  // ── Students (Supabase first, merged with localStorage nested data) ──
   let students;
   try {
     const { data: rows, error } = await supabase.from('students').select('*');
@@ -68,17 +107,14 @@ export async function loadAll() {
       return mergeStudent(row, ls);
     });
 
-    // Include any localStorage-only students (in case Supabase INSERT failed during registration)
     const supabaseIds = new Set((rows || []).map(r => r.id));
     const lsOnly = lsStudents.filter(s => !supabaseIds.has(s.id));
 
     students = [...supabaseStudents, ...lsOnly];
     console.log(`[db] loadAll — ${students.length} students (${supabaseStudents.length} from Supabase, ${lsOnly.length} local-only)`);
-
-    // Persist the merged list so mutations can update it
     saveStudents(students);
   } catch (e) {
-    console.error('[db] Could not load students from Supabase — falling back to localStorage:', e);
+    console.error('[db] loadAll — students Supabase error, falling back to localStorage:', e);
     students = getStudents();
   }
 
@@ -87,18 +123,10 @@ export async function loadAll() {
     registrationMode: 'open', programsLabel: 'Programs',
   });
 
-  console.log('[db] loadAll — loaded from localStorage:', {
-    community: !!lsGet('community'),
-    groups: lsGet('groups', []).length,
-    students: students.length,
-    activities: lsGet('activities', []).length,
-    periods: lsGet('periods', []).length,
-  });
-
   return {
-    community:               lsGet('community', null),
+    community,
     adminSettings,
-    groups:                  lsGet('groups', []),
+    groups,
     students,
     activities:              lsGet('activities', []),
     periods:                 lsGet('periods', []),
@@ -110,9 +138,22 @@ export async function loadAll() {
 }
 
 // ─── COMMUNITY ────────────────────────────────────────────────────
-export function dbSaveCommunity(fields) {
-  console.log('[db] saveCommunity');
-  lsSave('community', fields);
+export async function dbSaveCommunity(fields) {
+  console.log('[db] saveCommunity — writing to Supabase');
+  const { error } = await supabase.from('communities').upsert({
+    id:           'main',
+    name:         fields.name        || '',
+    logo:         fields.logo        ?? null,
+    banner:       fields.banner      ?? null,
+    banner_dark:  fields.bannerDark  ?? null,
+    banner_light: fields.bannerLight ?? null,
+  }, { onConflict: 'id' });
+  if (error) {
+    console.error('[db] saveCommunity — Supabase write FAILED:', error);
+    return false;
+  }
+  lsSave('community', fields); // backup
+  console.log('[db] ✓ saveCommunity — saved to Supabase');
   return true;
 }
 
@@ -128,17 +169,38 @@ export function dbSaveAdminSettings(fields) {
 }
 
 // ─── GROUPS ───────────────────────────────────────────────────────
-export function dbAddGroup(group) {
-  console.log('[db] addGroup:', group.name);
-  const groups = lsGet('groups', []);
-  groups.push(group);
-  lsSave('groups', groups);
+export async function dbAddGroup(group) {
+  console.log('[db] addGroup — writing to Supabase:', group.name);
+  const { error } = await supabase.from('groups').insert({
+    id:         group.id,
+    name:       group.name,
+    group_code: group.groupCode,
+    is_active:  group.isActive ?? true,
+  });
+  if (error) {
+    console.error('[db] addGroup — Supabase write FAILED:', error);
+    return null;
+  }
+  const arr = lsGet('groups', []);
+  arr.push(group);
+  lsSave('groups', arr); // backup
+  console.log('[db] ✓ addGroup — saved to Supabase:', group.name);
   return group;
 }
 
-export function dbUpdateGroup(id, fields) {
-  console.log('[db] updateGroup:', id);
-  lsSave('groups', lsGet('groups', []).map(g => g.id === id ? { ...g, ...fields } : g));
+export async function dbUpdateGroup(id, fields) {
+  console.log('[db] updateGroup — writing to Supabase:', id);
+  const row = {};
+  if (fields.name      !== undefined) row.name       = fields.name;
+  if (fields.groupCode !== undefined) row.group_code = fields.groupCode;
+  if (fields.isActive  !== undefined) row.is_active  = fields.isActive;
+  const { error } = await supabase.from('groups').update(row).eq('id', id);
+  if (error) {
+    console.error('[db] updateGroup — Supabase write FAILED:', error);
+    return false;
+  }
+  lsSave('groups', lsGet('groups', []).map(g => g.id === id ? { ...g, ...fields } : g)); // backup
+  console.log('[db] ✓ updateGroup — saved to Supabase:', id);
   return true;
 }
 
