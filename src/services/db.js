@@ -51,6 +51,44 @@ function mergeStudent(row, ls = {}) {
   };
 }
 
+// ─── ENSURE COMMUNITY ─────────────────────────────────────────────
+// Checks if communities table has a row. If not, inserts the default.
+// Returns the community id (always 'main') or null on failure.
+// Call this once on app startup before anything else writes to Supabase.
+let _communityId = null; // module-level cache
+
+export async function dbEnsureCommunity() {
+  if (_communityId) return _communityId; // already confirmed this session
+
+  console.log('[db] dbEnsureCommunity — checking communities table');
+  try {
+    const { data, error } = await supabase.from('communities').select('id').eq('id', 'main').maybeSingle();
+    if (error) throw error;
+
+    if (data) {
+      console.log('[db] ✓ dbEnsureCommunity — community exists:', data.id);
+      _communityId = data.id;
+      return _communityId;
+    }
+
+    // No row — insert default community
+    console.log('[db] dbEnsureCommunity — no community found, inserting default');
+    const { data: inserted, error: insertError } = await supabase
+      .from('communities')
+      .insert({ id: 'main', name: 'Kyrgyz Community Center' })
+      .select('id')
+      .single();
+    if (insertError) throw insertError;
+
+    console.log('[db] ✓ dbEnsureCommunity — default community inserted, id:', inserted.id);
+    _communityId = inserted.id;
+    return _communityId;
+  } catch (e) {
+    console.error('[db] dbEnsureCommunity — FAILED:', e);
+    return null;
+  }
+}
+
 // ─── COMMUNITY LOAD ───────────────────────────────────────────────
 export async function dbLoadCommunity() {
   console.log('[db] dbLoadCommunity — fetching from Supabase');
@@ -176,11 +214,19 @@ export function dbSaveAdminSettings(fields) {
 // ─── GROUPS ───────────────────────────────────────────────────────
 export async function dbAddGroup(group) {
   console.log('[db] addGroup — writing to Supabase:', group.name);
+
+  const communityId = await dbEnsureCommunity();
+  if (!communityId) {
+    console.error('[db] addGroup — cannot insert without a community_id');
+    return null;
+  }
+
   const { error } = await supabase.from('groups').insert({
-    id:         group.id,
-    name:       group.name,
-    group_code: group.groupCode,
-    is_active:  group.isActive ?? true,
+    id:           group.id,
+    name:         group.name,
+    group_code:   group.groupCode,
+    is_active:    group.isActive ?? true,
+    community_id: communityId,
   });
   if (error) {
     console.error('[db] addGroup — Supabase write FAILED:', error);
