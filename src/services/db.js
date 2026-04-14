@@ -1,87 +1,144 @@
 // ─────────────────────────────────────────────────────────────────
-//  db.js — localStorage for everything.
+//  db.js — all reads and writes go through Supabase.
 //
-//  EXCEPTIONS (Supabase):
-//    loadAll       — students are fetched from Supabase (enables login validation)
-//    dbRegisterStudent — INSERTs into Supabase students table
-//
-//  All other reads/writes go to localStorage.
+//  localStorage is NOT used here for any app data.
+//  Theme (theme key) and session (currentStudent, adminSession) are
+//  handled in data.js / AuthContext.jsx and must not be changed.
 // ─────────────────────────────────────────────────────────────────
 
 import { supabase } from './supabase.js';
 import { generateId } from './data.js';
 
-// ─── localStorage helpers ─────────────────────────────────────────
-function lsGet(key, def = null) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : def;
-  } catch { return def; }
-}
-function lsSave(key, data) {
-  try { localStorage.setItem(key, JSON.stringify(data)); }
-  catch (e) { console.error('[db] localStorage write error:', key, e); }
-}
+// ─── Row → JS object mappers ──────────────────────────────────────
 
-// ─── Student helpers ──────────────────────────────────────────────
-function getStudents() { return lsGet('students', []); }
-function saveStudents(arr) { lsSave('students', arr); }
-
-// Merge a Supabase student row with its localStorage counterpart.
-// localStorage takes precedence for all mutable fields; Supabase
-// provides username/password as the auth source of truth.
-function mergeStudent(row, ls = {}) {
+function mapStudent(row, submissions = [], bonusPoints = [], books = [], programCompletions = []) {
   return {
     id:                     row.id,
-    fullName:               ls.fullName               || row.full_name                || '',
-    username:               row.username,                      // auth — from Supabase
-    password:               row.password,                      // auth — from Supabase
-    groupId:                ls.groupId                ?? row.group_id,
-    secondaryGroupIds:      ls.secondaryGroupIds       || row.secondary_group_ids      || [],
-    status:                 ls.status                 ?? row.status,
-    university:             ls.university              || row.university               || '',
-    phone:                  ls.phone                  || row.phone                    || '',
-    avatar:                 ls.avatar                 ?? row.avatar                   ?? null,
-    tasbih:                 ls.tasbih                 || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
-    personalTasbihProgress: ls.personalTasbihProgress || {},
-    submissions:            ls.submissions            || [],
-    bonusPoints:            ls.bonusPoints            || [],
-    books:                  ls.books                  || [],
-    programCompletions:     ls.programCompletions     || [],
+    fullName:               row.full_name || '',
+    username:               row.username,
+    password:               row.password,
+    groupId:                row.group_id,
+    secondaryGroupIds:      row.secondary_group_ids || [],
+    status:                 row.status,
+    university:             row.university || '',
+    phone:                  row.phone || '',
+    avatar:                 row.avatar ?? null,
+    tasbih:                 row.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
+    personalTasbihProgress: row.personal_tasbih_progress || {},
+    submissions,
+    bonusPoints,
+    books,
+    programCompletions,
+  };
+}
+
+function mapSubmission(row) {
+  return {
+    date:                row.date,
+    completedActivities: row.completed_activities || [],
+    quote:               row.quote || '',
+    quoteLikes:          row.quote_likes || [],
+  };
+}
+
+function mapBonusPoint(row) {
+  return { id: row.id, date: row.date, points: row.points, reason: row.reason || '' };
+}
+
+function mapBook(row) {
+  return {
+    id:           row.id,
+    title:        row.title || '',
+    author:       row.author || '',
+    totalPages:   row.total_pages || 0,
+    currentPage:  row.current_page || 0,
+    status:       row.status || 'reading',
+    startedDate:  row.started_date || null,
+    finishedDate: row.finished_date || null,
+  };
+}
+
+function mapProgramCompletion(row) {
+  return {
+    id:        row.id,
+    programId: row.program_id,
+    taskId:    row.task_id,
+    isDone:    row.is_done,
+    count:     row.count,
+  };
+}
+
+function mapActivity(row) {
+  return { id: row.id, groupId: row.group_id, name: row.name, points: row.points, isActive: row.is_active };
+}
+
+function mapPeriod(row) {
+  return {
+    id:              row.id,
+    groupId:         row.group_id,
+    name:            row.name,
+    startDate:       row.start_date,
+    endDate:         row.end_date,
+    isActive:        row.is_active,
+    countForAllTime: row.count_for_all_time,
+    prizeText:       row.prize_text || '',
+  };
+}
+
+function mapGlobalTasbih(row) {
+  return {
+    id:             row.id,
+    title:          row.title,
+    description:    row.description || '',
+    target:         row.target,
+    current:        row.current,
+    completedTimes: row.completed_times,
+    isActive:       row.is_active,
+    groupScope:     row.group_scope || 'all',
+  };
+}
+
+function mapPersonalTemplate(row) {
+  return {
+    id:          row.id,
+    title:       row.title,
+    description: row.description || '',
+    target:      row.target,
+    groupScope:  row.group_scope || 'all',
+    isActive:    row.is_active,
+  };
+}
+
+function mapProgram(row) {
+  return {
+    id:          row.id,
+    name:        row.name,
+    description: row.description || '',
+    date:        row.date || '',
+    groupScope:  row.group_scope || 'all',
+    isActive:    row.is_active,
+    tasks:       row.tasks || [],
   };
 }
 
 // ─── ENSURE COMMUNITY ─────────────────────────────────────────────
-// Checks if communities table has a row. If not, inserts the default.
-// Returns the community id (always 'main') or null on failure.
-// Call this once on app startup before anything else writes to Supabase.
-let _communityId = null; // module-level cache
+let _communityId = null;
 
 export async function dbEnsureCommunity() {
-  if (_communityId) return _communityId; // already confirmed this session
-
+  if (_communityId) return _communityId;
   console.log('[db] dbEnsureCommunity — checking communities table');
   try {
     const { data, error } = await supabase.from('communities').select('id').eq('id', 'main').maybeSingle();
     if (error) throw error;
+    if (data) { _communityId = data.id; return _communityId; }
 
-    if (data) {
-      console.log('[db] ✓ dbEnsureCommunity — community exists:', data.id);
-      _communityId = data.id;
-      return _communityId;
-    }
-
-    // No row — insert default community
-    console.log('[db] dbEnsureCommunity — no community found, inserting default');
     const { data: inserted, error: insertError } = await supabase
       .from('communities')
       .insert({ id: 'main', name: 'Kyrgyz Community Center' })
-      .select('id')
-      .single();
+      .select('id').single();
     if (insertError) throw insertError;
-
-    console.log('[db] ✓ dbEnsureCommunity — default community inserted, id:', inserted.id);
     _communityId = inserted.id;
+    console.log('[db] ✓ dbEnsureCommunity — default community inserted');
     return _communityId;
   } catch (e) {
     console.error('[db] dbEnsureCommunity — FAILED:', e);
@@ -96,21 +153,19 @@ export async function dbLoadCommunity() {
     const { data, error } = await supabase.from('communities').select('*').eq('id', 'main').maybeSingle();
     if (error) throw error;
     if (data) {
-      const community = {
+      console.log('[db] ✓ dbLoadCommunity — loaded from Supabase');
+      return {
         name:        data.name         || '',
         logo:        data.logo         ?? null,
         banner:      data.banner       ?? null,
         bannerDark:  data.banner_dark  ?? null,
         bannerLight: data.banner_light ?? null,
       };
-      console.log('[db] ✓ dbLoadCommunity — loaded from Supabase');
-      return community;
     }
-    console.log('[db] dbLoadCommunity — no row in Supabase, falling back to localStorage');
   } catch (e) {
-    console.error('[db] dbLoadCommunity — Supabase error, falling back to localStorage:', e);
+    console.error('[db] dbLoadCommunity — Supabase error:', e);
   }
-  return lsGet('community', null);
+  return null;
 }
 
 // ─── GROUPS LOAD ──────────────────────────────────────────────────
@@ -119,64 +174,93 @@ export async function dbLoadGroups() {
   try {
     const { data, error } = await supabase.from('groups').select('*');
     if (error) throw error;
-    if (data && data.length > 0) {
-      const groups = data.map(r => ({ id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active }));
-      lsSave('groups', groups); // keep localStorage in sync
-      console.log(`[db] ✓ dbLoadGroups — ${groups.length} groups loaded from Supabase`);
-      return groups;
-    }
-    console.log('[db] dbLoadGroups — no rows in Supabase, falling back to localStorage');
+    const groups = (data || []).map(r => ({ id: r.id, name: r.name, groupCode: r.group_code, isActive: r.is_active }));
+    console.log(`[db] ✓ dbLoadGroups — ${groups.length} groups loaded`);
+    return groups;
   } catch (e) {
-    console.error('[db] dbLoadGroups — Supabase error, falling back to localStorage:', e);
+    console.error('[db] dbLoadGroups — Supabase error:', e);
+    return [];
   }
-  return lsGet('groups', []);
 }
 
 // ─── loadAll ──────────────────────────────────────────────────────
 export async function loadAll() {
-  console.log('[db] loadAll — loading all app data…');
+  console.log('[db] loadAll — loading all app data from Supabase…');
 
-  const [community, groups] = await Promise.all([dbLoadCommunity(), dbLoadGroups()]);
+  const TABLE_NAMES = [
+    'students', 'submissions', 'bonus_points', 'books', 'program_completions',
+    'activities', 'periods', 'global_tasbihs', 'personal_tasbih_templates',
+    'programs', 'collective_task_counts', 'admin_settings',
+  ];
 
-  // ── Students (Supabase first, merged with localStorage nested data) ──
-  let students;
-  try {
-    const { data: rows, error } = await supabase.from('students').select('*');
-    if (error) throw error;
+  const [
+    { data: studentRows,    error: e1  },
+    { data: submissionRows, error: e2  },
+    { data: bonusRows,      error: e3  },
+    { data: bookRows,       error: e4  },
+    { data: completionRows, error: e5  },
+    { data: activityRows,   error: e6  },
+    { data: periodRows,     error: e7  },
+    { data: tasbihRows,     error: e8  },
+    { data: templateRows,   error: e9  },
+    { data: programRows,    error: e10 },
+    { data: ctcRows,        error: e11 },
+    { data: settingsRow,    error: e12 },
+    community,
+    groups,
+  ] = await Promise.all([
+    supabase.from('students').select('*'),
+    supabase.from('submissions').select('*'),
+    supabase.from('bonus_points').select('*'),
+    supabase.from('books').select('*'),
+    supabase.from('program_completions').select('*'),
+    supabase.from('activities').select('*'),
+    supabase.from('periods').select('*'),
+    supabase.from('global_tasbihs').select('*'),
+    supabase.from('personal_tasbih_templates').select('*'),
+    supabase.from('programs').select('*'),
+    supabase.from('collective_task_counts').select('*'),
+    supabase.from('admin_settings').select('*').eq('id', 'main').maybeSingle(),
+    dbLoadCommunity(),
+    dbLoadGroups(),
+  ]);
 
-    const lsStudents = getStudents();
-    const supabaseStudents = (rows || []).map(row => {
-      const ls = lsStudents.find(s => s.id === row.id) || {};
-      return mergeStudent(row, ls);
-    });
-
-    const supabaseIds = new Set((rows || []).map(r => r.id));
-    const lsOnly = lsStudents.filter(s => !supabaseIds.has(s.id));
-
-    students = [...supabaseStudents, ...lsOnly];
-    console.log(`[db] loadAll — ${students.length} students (${supabaseStudents.length} from Supabase, ${lsOnly.length} local-only)`);
-    saveStudents(students);
-  } catch (e) {
-    console.error('[db] loadAll — students Supabase error, falling back to localStorage:', e);
-    students = getStudents();
-  }
-
-  const adminSettings = lsGet('adminSettings', {
-    adminUsername: 'admin', adminPassword: 'admin1',
-    registrationMode: 'open', programsLabel: 'Programs',
+  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12].forEach((e, i) => {
+    if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
+  const students = (studentRows || []).map(row => {
+    const subs  = (submissionRows  || []).filter(r => r.student_id === row.id).map(mapSubmission);
+    const bonus = (bonusRows       || []).filter(r => r.student_id === row.id).map(mapBonusPoint);
+    const books = (bookRows        || []).filter(r => r.student_id === row.id).map(mapBook);
+    const comps = (completionRows  || []).filter(r => r.student_id === row.id).map(mapProgramCompletion);
+    return mapStudent(row, subs, bonus, books, comps);
+  });
+
+  const collectiveTaskCounts = Object.fromEntries(
+    (ctcRows || []).map(r => [r.task_id, { count: r.count, completedTimes: r.completed_times }])
+  );
+
+  const s = settingsRow || {};
+  const adminSettings = {
+    adminUsername:    s.admin_username    || 'admin',
+    adminPassword:    s.admin_password    || 'admin1',
+    registrationMode: s.registration_mode || 'open',
+    programsLabel:    s.programs_label    || 'Programs',
+  };
+
+  console.log(`[db] ✓ loadAll — ${students.length} students, ${activityRows?.length || 0} activities, ${periodRows?.length || 0} periods`);
   return {
     community,
     adminSettings,
     groups,
     students,
-    activities:              lsGet('activities', []),
-    periods:                 lsGet('periods', []),
-    globalTasbihs:           lsGet('globalTasbihs', []),
-    personalTasbihTemplates: lsGet('personalTasbihTemplates', []),
-    programs:                lsGet('programs', []),
-    collectiveTaskCounts:    lsGet('collectiveTaskCounts', {}),
+    activities:              (activityRows  || []).map(mapActivity),
+    periods:                 (periodRows    || []).map(mapPeriod),
+    globalTasbihs:           (tasbihRows    || []).map(mapGlobalTasbih),
+    personalTasbihTemplates: (templateRows  || []).map(mapPersonalTemplate),
+    programs:                (programRows   || []).map(mapProgram),
+    collectiveTaskCounts,
   };
 }
 
@@ -191,35 +275,33 @@ export async function dbSaveCommunity(fields) {
     banner_dark:  fields.bannerDark  ?? null,
     banner_light: fields.bannerLight ?? null,
   }, { onConflict: 'id' });
-  if (error) {
-    console.error('[db] saveCommunity — Supabase write FAILED:', error);
-    return false;
-  }
-  lsSave('community', fields); // backup
+  if (error) { console.error('[db] saveCommunity — Supabase write FAILED:', error); return false; }
   console.log('[db] ✓ saveCommunity — saved to Supabase');
   return true;
 }
 
 // ─── ADMIN SETTINGS ───────────────────────────────────────────────
-export function dbSaveAdminSettings(fields) {
+// The SQL schema seeds admin_settings with a default 'main' row.
+// We always UPDATE — never INSERT — since that row is always present.
+export async function dbSaveAdminSettings(fields) {
   console.log('[db] saveAdminSettings:', Object.keys(fields));
-  const current = lsGet('adminSettings', {
-    adminUsername: 'admin', adminPassword: 'admin1',
-    registrationMode: 'open', programsLabel: 'Programs',
-  });
-  lsSave('adminSettings', { ...current, ...fields });
+  const row = {};
+  if (fields.adminUsername    !== undefined) row.admin_username    = fields.adminUsername;
+  if (fields.adminPassword    !== undefined) row.admin_password    = fields.adminPassword;
+  if (fields.registrationMode !== undefined) row.registration_mode = fields.registrationMode;
+  if (fields.programsLabel    !== undefined) row.programs_label    = fields.programsLabel;
+
+  const { error } = await supabase.from('admin_settings').update(row).eq('id', 'main');
+  if (error) { console.error('[db] saveAdminSettings — Supabase write FAILED:', error); return false; }
+  console.log('[db] ✓ saveAdminSettings — saved to Supabase');
   return true;
 }
 
 // ─── GROUPS ───────────────────────────────────────────────────────
 export async function dbAddGroup(group) {
   console.log('[db] addGroup — writing to Supabase:', group.name);
-
   const communityId = await dbEnsureCommunity();
-  if (!communityId) {
-    console.error('[db] addGroup — cannot insert without a community_id');
-    return null;
-  }
+  if (!communityId) { console.error('[db] addGroup — cannot insert without a community_id'); return null; }
 
   const { error } = await supabase.from('groups').insert({
     id:           group.id,
@@ -228,13 +310,7 @@ export async function dbAddGroup(group) {
     is_active:    group.isActive ?? true,
     community_id: communityId,
   });
-  if (error) {
-    console.error('[db] addGroup — Supabase write FAILED:', error);
-    return null;
-  }
-  const arr = lsGet('groups', []);
-  arr.push(group);
-  lsSave('groups', arr); // backup
+  if (error) { console.error('[db] addGroup — Supabase write FAILED:', error); return null; }
   console.log('[db] ✓ addGroup — saved to Supabase:', group.name);
   return group;
 }
@@ -245,288 +321,452 @@ export async function dbUpdateGroup(id, fields) {
   if (fields.name      !== undefined) row.name       = fields.name;
   if (fields.groupCode !== undefined) row.group_code = fields.groupCode;
   if (fields.isActive  !== undefined) row.is_active  = fields.isActive;
+
   const { error } = await supabase.from('groups').update(row).eq('id', id);
-  if (error) {
-    console.error('[db] updateGroup — Supabase write FAILED:', error);
-    return false;
-  }
-  lsSave('groups', lsGet('groups', []).map(g => g.id === id ? { ...g, ...fields } : g)); // backup
+  if (error) { console.error('[db] updateGroup — Supabase write FAILED:', error); return false; }
   console.log('[db] ✓ updateGroup — saved to Supabase:', id);
   return true;
 }
 
 // ─── ACTIVITIES ───────────────────────────────────────────────────
-export function dbAddActivity(act) {
+export async function dbAddActivity(act) {
   console.log('[db] addActivity:', act.name);
-  const acts = lsGet('activities', []);
-  acts.push(act);
-  lsSave('activities', acts);
+  const { error } = await supabase.from('activities').insert({
+    id:        act.id,
+    group_id:  act.groupId,
+    name:      act.name,
+    points:    act.points,
+    is_active: act.isActive ?? true,
+  });
+  if (error) { console.error('[db] addActivity — Supabase write FAILED:', error); return null; }
   return act;
 }
 
-export function dbAddActivities(acts) {
+export async function dbAddActivities(acts) {
   console.log('[db] addActivities:', acts.length);
-  lsSave('activities', [...lsGet('activities', []), ...acts]);
+  const rows = acts.map(act => ({
+    id:        act.id,
+    group_id:  act.groupId,
+    name:      act.name,
+    points:    act.points,
+    is_active: act.isActive ?? true,
+  }));
+  const { error } = await supabase.from('activities').insert(rows);
+  if (error) { console.error('[db] addActivities — Supabase write FAILED:', error); return null; }
   return acts;
 }
 
-export function dbUpdateActivity(id, fields) {
+export async function dbUpdateActivity(id, fields) {
   console.log('[db] updateActivity:', id);
-  lsSave('activities', lsGet('activities', []).map(a => a.id === id ? { ...a, ...fields } : a));
+  const row = {};
+  if (fields.name     !== undefined) row.name      = fields.name;
+  if (fields.points   !== undefined) row.points    = fields.points;
+  if (fields.isActive !== undefined) row.is_active = fields.isActive;
+  if (fields.groupId  !== undefined) row.group_id  = fields.groupId;
+
+  const { error } = await supabase.from('activities').update(row).eq('id', id);
+  if (error) { console.error('[db] updateActivity — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── PERIODS ──────────────────────────────────────────────────────
-export function dbAddPeriod(period) {
+export async function dbAddPeriod(period) {
   console.log('[db] addPeriod:', period.name);
-  const periods = lsGet('periods', []);
-  periods.push(period);
-  lsSave('periods', periods);
+  const { error } = await supabase.from('periods').insert({
+    id:                 period.id,
+    group_id:           period.groupId,
+    name:               period.name,
+    start_date:         period.startDate         || null,
+    end_date:           period.endDate           || null,
+    is_active:          period.isActive          ?? false,
+    count_for_all_time: period.countForAllTime   ?? false,
+    prize_text:         period.prizeText         || '',
+  });
+  if (error) { console.error('[db] addPeriod — Supabase write FAILED:', error); return null; }
   return period;
 }
 
-export function dbUpdatePeriod(id, fields) {
+export async function dbUpdatePeriod(id, fields) {
   console.log('[db] updatePeriod:', id);
-  lsSave('periods', lsGet('periods', []).map(p => p.id === id ? { ...p, ...fields } : p));
+  const row = {};
+  if (fields.name             !== undefined) row.name               = fields.name;
+  if (fields.startDate        !== undefined) row.start_date         = fields.startDate;
+  if (fields.endDate          !== undefined) row.end_date           = fields.endDate;
+  if (fields.isActive         !== undefined) row.is_active          = fields.isActive;
+  if (fields.countForAllTime  !== undefined) row.count_for_all_time = fields.countForAllTime;
+  if (fields.prizeText        !== undefined) row.prize_text         = fields.prizeText;
+
+  const { error } = await supabase.from('periods').update(row).eq('id', id);
+  if (error) { console.error('[db] updatePeriod — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbDeletePeriod(id) {
+export async function dbDeletePeriod(id) {
   console.log('[db] deletePeriod:', id);
-  lsSave('periods', lsGet('periods', []).filter(p => p.id !== id));
+  const { error } = await supabase.from('periods').delete().eq('id', id);
+  if (error) { console.error('[db] deletePeriod — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbActivatePeriod(id, groupId) {
+export async function dbActivatePeriod(id, groupId) {
   console.log('[db] activatePeriod:', id, groupId);
-  lsSave('periods', lsGet('periods', []).map(p =>
-    p.groupId === groupId ? { ...p, isActive: p.id === id } : p
-  ));
+  // Deactivate all periods in the group, then activate the target one
+  const { error: e1 } = await supabase.from('periods').update({ is_active: false }).eq('group_id', groupId);
+  if (e1) { console.error('[db] activatePeriod — deactivate-all FAILED:', e1); return false; }
+  const { error: e2 } = await supabase.from('periods').update({ is_active: true }).eq('id', id);
+  if (e2) { console.error('[db] activatePeriod — activate FAILED:', e2); return false; }
   return true;
 }
 
 // ─── STUDENTS ─────────────────────────────────────────────────────
-// registerStudent — INSERT into Supabase, then save to localStorage.
 export async function dbRegisterStudent(student) {
   console.log('[db] registerStudent:', student.username, '— inserting into Supabase');
 
   const { error } = await supabase.from('students').insert({
-    id:                      student.id,
-    full_name:               student.fullName,
-    username:                student.username,
-    password:                student.password,
-    group_id:                student.groupId,
-    secondary_group_ids:     student.secondaryGroupIds || [],
-    status:                  student.status,
-    university:              student.university || '',
-    phone:                   student.phone || '',
-    avatar:                  student.avatar || null,
-    tasbih:                  student.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
+    id:                       student.id,
+    full_name:                student.fullName,
+    username:                 student.username,
+    password:                 student.password,
+    group_id:                 student.groupId,
+    secondary_group_ids:      student.secondaryGroupIds || [],
+    status:                   student.status,
+    university:               student.university || '',
+    phone:                    student.phone || '',
+    avatar:                   student.avatar || null,
+    tasbih:                   student.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personal_tasbih_progress: student.personalTasbihProgress || {},
   });
 
   if (error) {
-    console.error('[db] registerStudent Supabase error — saving to localStorage only:', error);
-  } else {
-    console.log('[db] ✓ registerStudent — inserted into Supabase:', student.username);
+    console.error('[db] registerStudent — Supabase write FAILED:', error);
+    return null;
   }
 
-  // Always save to localStorage so the app works even if Supabase INSERT failed
-  const students = getStudents();
-  const full = { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [] };
-  students.push(full);
-  saveStudents(students);
-
-  return full;
+  console.log('[db] ✓ registerStudent — inserted into Supabase:', student.username);
+  return { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [] };
 }
 
-export function dbUpdateStudent(id, fields) {
+export async function dbUpdateStudent(id, fields) {
   console.log('[db] updateStudent:', id, Object.keys(fields));
-  saveStudents(getStudents().map(s => s.id === id ? { ...s, ...fields } : s));
+  const row = {};
+  if (fields.fullName          !== undefined) row.full_name           = fields.fullName;
+  if (fields.username          !== undefined) row.username            = fields.username;
+  if (fields.password          !== undefined) row.password            = fields.password;
+  if (fields.groupId           !== undefined) row.group_id            = fields.groupId;
+  if (fields.secondaryGroupIds !== undefined) row.secondary_group_ids = fields.secondaryGroupIds;
+  if (fields.status            !== undefined) row.status              = fields.status;
+  if (fields.university        !== undefined) row.university          = fields.university;
+  if (fields.phone             !== undefined) row.phone               = fields.phone;
+  if (fields.avatar            !== undefined) row.avatar              = fields.avatar;
+
+  if (Object.keys(row).length === 0) return true;
+
+  const { error } = await supabase.from('students').update(row).eq('id', id);
+  if (error) { console.error('[db] updateStudent — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbDeleteStudent(id) {
+export async function dbDeleteStudent(id) {
   console.log('[db] deleteStudent:', id);
-  saveStudents(getStudents().filter(s => s.id !== id));
+  const { error } = await supabase.from('students').delete().eq('id', id);
+  if (error) { console.error('[db] deleteStudent — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export function dbSubmitDay(studentId, dateStr, completedActivities, quote) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote) {
   console.log('[db] submitDay:', studentId, dateStr);
-  saveStudents(getStudents().map(s => {
-    if (s.id !== studentId) return s;
-    const already = (s.submissions || []).some(x => x.date === dateStr);
-    if (already) return s;
-    return { ...s, submissions: [...(s.submissions || []), { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [] }] };
-  }));
+  const { data: existing } = await supabase
+    .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+  if (existing) { console.log('[db] submitDay — already submitted, skipping'); return true; }
+
+  const { error } = await supabase.from('submissions').insert({
+    id:                   generateId(),
+    student_id:           studentId,
+    date:                 dateStr,
+    completed_activities: completedActivities,
+    quote:                quote || '',
+    quote_likes:          [],
+  });
+  if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbEditSubmission(studentId, dateStr, completedActivities) {
+export async function dbEditSubmission(studentId, dateStr, completedActivities) {
   console.log('[db] editSubmission:', studentId, dateStr);
-  saveStudents(getStudents().map(s => {
-    if (s.id !== studentId) return s;
-    const subs = (s.submissions || []).map(sub =>
-      sub.date === dateStr ? { ...sub, completedActivities } : sub
-    );
-    const exists = subs.some(sub => sub.date === dateStr);
-    return { ...s, submissions: exists ? subs : [...subs, { date: dateStr, completedActivities, quote: '', quoteLikes: [] }] };
-  }));
+  const { data: existing } = await supabase
+    .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from('submissions')
+      .update({ completed_activities: completedActivities })
+      .eq('student_id', studentId).eq('date', dateStr);
+    if (error) { console.error('[db] editSubmission update — FAILED:', error); return false; }
+  } else {
+    const { error } = await supabase.from('submissions').insert({
+      id:                   generateId(),
+      student_id:           studentId,
+      date:                 dateStr,
+      completed_activities: completedActivities,
+      quote:                '',
+      quote_likes:          [],
+    });
+    if (error) { console.error('[db] editSubmission insert — FAILED:', error); return false; }
+  }
   return true;
 }
 
-export function dbToggleQuoteLike(ownerId, dateStr, likerId) {
+export async function dbToggleQuoteLike(ownerId, dateStr, likerId) {
   console.log('[db] toggleQuoteLike:', ownerId, dateStr, likerId);
-  saveStudents(getStudents().map(s => {
-    if (s.id !== ownerId) return s;
-    const subs = (s.submissions || []).map(sub => {
-      if (sub.date !== dateStr) return sub;
-      const likes = sub.quoteLikes || [];
-      const already = likes.includes(likerId);
-      return { ...sub, quoteLikes: already ? likes.filter(l => l !== likerId) : [...likes, likerId] };
-    });
-    return { ...s, submissions: subs };
-  }));
+  const { data, error: fetchError } = await supabase
+    .from('submissions').select('quote_likes').eq('student_id', ownerId).eq('date', dateStr).maybeSingle();
+  if (fetchError) { console.error('[db] toggleQuoteLike fetch — FAILED:', fetchError); return false; }
+  if (!data) return false;
+
+  const likes = data.quote_likes || [];
+  const newLikes = likes.includes(likerId) ? likes.filter(l => l !== likerId) : [...likes, likerId];
+
+  const { error } = await supabase.from('submissions')
+    .update({ quote_likes: newLikes }).eq('student_id', ownerId).eq('date', dateStr);
+  if (error) { console.error('[db] toggleQuoteLike update — FAILED:', error); return false; }
   return true;
 }
 
 // ─── BONUS POINTS ─────────────────────────────────────────────────
-export function dbAddBonusPoints(studentId, date, points, reason) {
+export async function dbAddBonusPoints(studentId, date, points, reason) {
   console.log('[db] addBonusPoints:', studentId, points);
-  const bp = { id: generateId(), date, points: Number(points), reason };
-  saveStudents(getStudents().map(s => {
-    if (s.id !== studentId) return s;
-    return { ...s, bonusPoints: [...(s.bonusPoints || []), bp] };
-  }));
+  const bp = { id: generateId(), date, points: Number(points), reason: reason || '' };
+  const { error } = await supabase.from('bonus_points').insert({
+    id:         bp.id,
+    student_id: studentId,
+    date:       bp.date,
+    points:     bp.points,
+    reason:     bp.reason,
+  });
+  if (error) { console.error('[db] addBonusPoints — Supabase write FAILED:', error); return null; }
   return bp;
 }
 
 // ─── STUDENT TASBIH ───────────────────────────────────────────────
-export function dbUpdateTasbih(studentId, tasbih) {
+export async function dbUpdateTasbih(studentId, tasbih) {
   console.log('[db] updateTasbih:', studentId);
-  saveStudents(getStudents().map(s => s.id === studentId ? { ...s, tasbih } : s));
+  const { error } = await supabase.from('students').update({ tasbih }).eq('id', studentId);
+  if (error) { console.error('[db] updateTasbih — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── GLOBAL TASBIH ────────────────────────────────────────────────
-export function dbAddGlobalTasbih(t) {
+export async function dbAddGlobalTasbih(t) {
   console.log('[db] addGlobalTasbih:', t.title);
-  const arr = lsGet('globalTasbihs', []);
-  arr.push(t);
-  lsSave('globalTasbihs', arr);
+  const { error } = await supabase.from('global_tasbihs').insert({
+    id:              t.id,
+    title:           t.title,
+    description:     t.description  || '',
+    target:          t.target,
+    current:         t.current      ?? 0,
+    completed_times: t.completedTimes ?? 0,
+    is_active:       t.isActive     ?? true,
+    group_scope:     t.groupScope   || 'all',
+  });
+  if (error) { console.error('[db] addGlobalTasbih — Supabase write FAILED:', error); return null; }
   return t;
 }
 
-export function dbUpdateGlobalTasbih(id, fields) {
+export async function dbUpdateGlobalTasbih(id, fields) {
   console.log('[db] updateGlobalTasbih:', id);
-  lsSave('globalTasbihs', lsGet('globalTasbihs', []).map(t => t.id === id ? { ...t, ...fields } : t));
+  const row = {};
+  if (fields.title          !== undefined) row.title           = fields.title;
+  if (fields.description    !== undefined) row.description     = fields.description;
+  if (fields.target         !== undefined) row.target          = fields.target;
+  if (fields.current        !== undefined) row.current         = fields.current;
+  if (fields.completedTimes !== undefined) row.completed_times = fields.completedTimes;
+  if (fields.isActive       !== undefined) row.is_active       = fields.isActive;
+  if (fields.groupScope     !== undefined) row.group_scope     = fields.groupScope;
+
+  const { error } = await supabase.from('global_tasbihs').update(row).eq('id', id);
+  if (error) { console.error('[db] updateGlobalTasbih — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── PERSONAL TASBIH TEMPLATES ────────────────────────────────────
-export function dbAddPersonalTemplate(t) {
+export async function dbAddPersonalTemplate(t) {
   console.log('[db] addPersonalTemplate:', t.title);
-  const arr = lsGet('personalTasbihTemplates', []);
-  arr.push(t);
-  lsSave('personalTasbihTemplates', arr);
+  const { error } = await supabase.from('personal_tasbih_templates').insert({
+    id:          t.id,
+    title:       t.title,
+    description: t.description || '',
+    target:      t.target,
+    group_scope: t.groupScope  || 'all',
+    is_active:   t.isActive    ?? true,
+  });
+  if (error) { console.error('[db] addPersonalTemplate — Supabase write FAILED:', error); return null; }
   return t;
 }
 
-export function dbUpdatePersonalTemplate(id, fields) {
+export async function dbUpdatePersonalTemplate(id, fields) {
   console.log('[db] updatePersonalTemplate:', id);
-  lsSave('personalTasbihTemplates', lsGet('personalTasbihTemplates', []).map(t => t.id === id ? { ...t, ...fields } : t));
+  const row = {};
+  if (fields.title       !== undefined) row.title       = fields.title;
+  if (fields.description !== undefined) row.description = fields.description;
+  if (fields.target      !== undefined) row.target      = fields.target;
+  if (fields.groupScope  !== undefined) row.group_scope = fields.groupScope;
+  if (fields.isActive    !== undefined) row.is_active   = fields.isActive;
+
+  const { error } = await supabase.from('personal_tasbih_templates').update(row).eq('id', id);
+  if (error) { console.error('[db] updatePersonalTemplate — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbDeletePersonalTemplate(id) {
+export async function dbDeletePersonalTemplate(id) {
   console.log('[db] deletePersonalTemplate:', id);
-  lsSave('personalTasbihTemplates', lsGet('personalTasbihTemplates', []).filter(t => t.id !== id));
+  const { error } = await supabase.from('personal_tasbih_templates').delete().eq('id', id);
+  if (error) { console.error('[db] deletePersonalTemplate — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── PERSONAL TASBIH PROGRESS ─────────────────────────────────────
-export function dbSavePersonalTplProgress(studentId, fullProgress) {
+export async function dbSavePersonalTplProgress(studentId, fullProgress) {
   console.log('[db] savePersonalTplProgress:', studentId);
-  saveStudents(getStudents().map(s =>
-    s.id === studentId ? { ...s, personalTasbihProgress: fullProgress } : s
-  ));
+  const { error } = await supabase.from('students')
+    .update({ personal_tasbih_progress: fullProgress }).eq('id', studentId);
+  if (error) { console.error('[db] savePersonalTplProgress — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── READING BOOKS ────────────────────────────────────────────────
-export function dbAddBook(studentId, book) {
+export async function dbAddBook(studentId, book) {
   console.log('[db] addBook:', studentId, book.title);
-  saveStudents(getStudents().map(s => {
-    if (s.id !== studentId) return s;
-    return { ...s, books: [...(s.books || []), book] };
-  }));
+  const { error } = await supabase.from('books').insert({
+    id:           book.id,
+    student_id:   studentId,
+    title:        book.title        || '',
+    author:       book.author       || '',
+    total_pages:  book.totalPages   || 0,
+    current_page: book.currentPage  || 0,
+    status:       book.status       || 'reading',
+    started_date:  book.startedDate  || null,
+    finished_date: book.finishedDate || null,
+  });
+  if (error) { console.error('[db] addBook — Supabase write FAILED:', error); return null; }
   return book;
 }
 
-export function dbUpdateBook(bookId, fields) {
+export async function dbUpdateBook(bookId, fields) {
   console.log('[db] updateBook:', bookId);
-  saveStudents(getStudents().map(s => ({
-    ...s, books: (s.books || []).map(b => b.id === bookId ? { ...b, ...fields } : b),
-  })));
+  const row = {};
+  if (fields.title        !== undefined) row.title         = fields.title;
+  if (fields.author       !== undefined) row.author        = fields.author;
+  if (fields.totalPages   !== undefined) row.total_pages   = fields.totalPages;
+  if (fields.currentPage  !== undefined) row.current_page  = fields.currentPage;
+  if (fields.status       !== undefined) row.status        = fields.status;
+  if (fields.startedDate  !== undefined) row.started_date  = fields.startedDate;
+  if (fields.finishedDate !== undefined) row.finished_date = fields.finishedDate;
+
+  const { error } = await supabase.from('books').update(row).eq('id', bookId);
+  if (error) { console.error('[db] updateBook — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbDeleteBook(bookId) {
+export async function dbDeleteBook(bookId) {
   console.log('[db] deleteBook:', bookId);
-  saveStudents(getStudents().map(s => ({
-    ...s, books: (s.books || []).filter(b => b.id !== bookId),
-  })));
+  const { error } = await supabase.from('books').delete().eq('id', bookId);
+  if (error) { console.error('[db] deleteBook — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── PROGRAMS ─────────────────────────────────────────────────────
-export function dbAddProgram(program) {
+export async function dbAddProgram(program) {
   console.log('[db] addProgram:', program.name);
-  const arr = lsGet('programs', []);
-  arr.push(program);
-  lsSave('programs', arr);
+  const { error } = await supabase.from('programs').insert({
+    id:          program.id,
+    name:        program.name,
+    description: program.description || '',
+    date:        program.date        || null,
+    group_scope: program.groupScope  || 'all',
+    is_active:   program.isActive    ?? true,
+    tasks:       program.tasks       || [],
+  });
+  if (error) { console.error('[db] addProgram — Supabase write FAILED:', error); return null; }
   return program;
 }
 
-export function dbUpdateProgram(id, fields) {
+export async function dbUpdateProgram(id, fields) {
   console.log('[db] updateProgram:', id);
-  lsSave('programs', lsGet('programs', []).map(p => p.id === id ? { ...p, ...fields } : p));
+  const row = {};
+  if (fields.name        !== undefined) row.name        = fields.name;
+  if (fields.description !== undefined) row.description = fields.description;
+  if (fields.date        !== undefined) row.date        = fields.date;
+  if (fields.groupScope  !== undefined) row.group_scope = fields.groupScope;
+  if (fields.isActive    !== undefined) row.is_active   = fields.isActive;
+  if (fields.tasks       !== undefined) row.tasks       = fields.tasks;
+
+  const { error } = await supabase.from('programs').update(row).eq('id', id);
+  if (error) { console.error('[db] updateProgram — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export function dbDeleteProgram(id) {
+export async function dbDeleteProgram(id) {
   console.log('[db] deleteProgram:', id);
-  lsSave('programs', lsGet('programs', []).filter(p => p.id !== id));
+  const { error } = await supabase.from('programs').delete().eq('id', id);
+  if (error) { console.error('[db] deleteProgram — Supabase write FAILED:', error); return false; }
   return true;
 }
 
 // ─── PROGRAM COMPLETIONS ──────────────────────────────────────────
-export function dbSaveProgramCompletion(studentId, programId, taskId, isDone, count) {
+export async function dbSaveProgramCompletion(studentId, programId, taskId, isDone, count) {
   console.log('[db] saveProgramCompletion:', studentId, taskId);
-  saveStudents(getStudents().map(s => {
-    if (s.id !== studentId) return s;
-    const comps = s.programCompletions || [];
-    const existing = comps.find(c => c.taskId === taskId);
-    const updated = existing
-      ? comps.map(c => c.taskId === taskId ? { ...c, isDone, count } : c)
-      : [...comps, { id: generateId(), programId, taskId, isDone, count }];
-    return { ...s, programCompletions: updated };
-  }));
+  const { data: existing } = await supabase
+    .from('program_completions').select('id')
+    .eq('student_id', studentId).eq('task_id', taskId).maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from('program_completions')
+      .update({ is_done: isDone, count })
+      .eq('student_id', studentId).eq('task_id', taskId);
+    if (error) { console.error('[db] saveProgramCompletion update — FAILED:', error); return false; }
+  } else {
+    const { error } = await supabase.from('program_completions').insert({
+      id:         generateId(),
+      student_id: studentId,
+      program_id: programId,
+      task_id:    taskId,
+      is_done:    isDone,
+      count,
+    });
+    if (error) { console.error('[db] saveProgramCompletion insert — FAILED:', error); return false; }
+  }
   return true;
 }
 
 // ─── COLLECTIVE TASK COUNTS ───────────────────────────────────────
-export function dbUpdateCollectiveTask(taskId, count, completedTimes) {
+export async function dbUpdateCollectiveTask(taskId, count, completedTimes) {
   console.log('[db] updateCollectiveTask:', taskId, count);
-  const counts = lsGet('collectiveTaskCounts', {});
-  counts[taskId] = { count, completedTimes };
-  lsSave('collectiveTaskCounts', counts);
+  const { error } = await supabase.from('collective_task_counts').upsert(
+    { task_id: taskId, count, completed_times: completedTimes },
+    { onConflict: 'task_id' }
+  );
+  if (error) { console.error('[db] updateCollectiveTask — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-// ─── Realtime subscriptions (no-ops for localStorage version) ─────
-export function subscribeToGlobalTasbihs(_cb) { return () => {}; }
-export function subscribeToStudents(_cb)      { return () => {}; }
-export function subscribeToSubmissions(_cb)   { return () => {}; }
+// ─── Realtime subscriptions ───────────────────────────────────────
+export function subscribeToGlobalTasbihs(cb) {
+  const channel = supabase.channel('rt_global_tasbihs')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'global_tasbihs' }, cb)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+export function subscribeToStudents(cb) {
+  const channel = supabase.channel('rt_students')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, cb)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
+
+export function subscribeToSubmissions(cb) {
+  const channel = supabase.channel('rt_submissions')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, cb)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}
