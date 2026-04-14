@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { generateId, todayString } from '../services/data.js';
+import { generateId, todayString, setSessionUsername } from '../services/data.js';
 import {
   loadAll,
   dbEnsureCommunity, dbLoadCommunity, dbLoadGroups,
@@ -191,6 +191,7 @@ export function AppProvider({ children }) {
     if (!confirmed) { console.error('[AppContext] registerStudent: Supabase write failed — state NOT updated'); return null; }
     const withArrays = { ...confirmed, submissions: [], bonusPoints: [], books: [], programCompletions: [] };
     setStudents(s => [...s, withArrays]);
+    setSessionUsername(withArrays.username); // auto-login: AuthContext picks this up on next students update
     return withArrays;
   }, []);
 
@@ -198,9 +199,15 @@ export function AppProvider({ children }) {
     console.log('[AppContext] updateStudent:', { id, fields });
     const ok = await dbUpdateStudent(id, fields);
     if (!ok) { console.error('[AppContext] updateStudent failed — state NOT updated'); return null; }
-    setStudents(s => s.map(st => st.id === id ? { ...st, ...fields } : st));
-    return students.find(st => st.id === id) || null;
-  }, [students]);
+    // Capture the merged student synchronously inside the functional update — never call reload()
+    let updated = null;
+    setStudents(s => s.map(st => {
+      if (st.id !== id) return st;
+      updated = { ...st, ...fields };
+      return updated;
+    }));
+    return updated;
+  }, []);
 
   const deleteStudent = useCallback(async (id) => {
     console.log('[AppContext] deleteStudent:', id);
