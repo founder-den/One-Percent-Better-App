@@ -44,6 +44,9 @@ export default function StudentsTab({ groupId }) {
   const [pwForm,    setPwForm]    = useState('');
   const [moveGroup, setMoveGroup] = useState('');
 
+  // Password reveal
+  const [revealedPw, setRevealedPw] = useState(null); // student id whose password is showing
+
   // Bonus points modal
   const [bonusModal,  setBonusModal]  = useState(null); // student
   const [bonusPts,    setBonusPts]    = useState('');
@@ -173,6 +176,18 @@ export default function StudentsTab({ groupId }) {
                 <div className="flex flex-col gap-1 items-end flex-shrink-0">
                   <Button variant="ghost" size="xs" onClick={() => openInfo(st)}>Edit</Button>
                   <Button variant="outline" size="xs" onClick={() => openBonus(st)}>Bonus</Button>
+                  <button
+                    onClick={() => setRevealedPw(id => id === st.id ? null : st.id)}
+                    title="View password"
+                    className="text-xs text-muted hover:text-primary transition-colors px-1"
+                  >
+                    {revealedPw === st.id ? '🙈' : '👁'}
+                  </button>
+                  {revealedPw === st.id && (
+                    <span className="text-xs font-mono bg-bg-card2 border border-border rounded px-2 py-0.5 text-primary select-all max-w-[120px] truncate">
+                      {st.password}
+                    </span>
+                  )}
                   <Button variant="danger" size="xs" onClick={() => { if (window.confirm(`Delete ${st.fullName}? This cannot be undone.`)) deleteStudent(st.id); }}>Delete</Button>
                 </div>
               </div>
