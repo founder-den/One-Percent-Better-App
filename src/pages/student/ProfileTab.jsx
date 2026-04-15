@@ -5,7 +5,7 @@ import { Card, Button, Input, Avatar, ImageUploadButton, SectionHeading, Alert, 
 import { formatDate } from '../../services/data.js';
 
 export default function ProfileTab() {
-  const { student, loginStudent } = useAuth();
+  const { student } = useAuth();
   const { updateStudent, findGroupById } = useApp();
 
   const group = findGroupById(student.groupId);
@@ -27,44 +27,41 @@ export default function ProfileTab() {
     return e => { setForm(f => ({ ...f, [k]: e.target.value })); setSaved(false); setErr(''); };
   }
 
-  function handleSaveProfile(e) {
+  async function handleSaveProfile(e) {
     e.preventDefault();
     setErr(''); setSaved(false);
     if (!form.fullName.trim()) { setErr('Full name is required.'); return; }
     if (!form.username.trim() || form.username.length < 3) { setErr('Username must be at least 3 characters.'); return; }
-    const updated = updateStudent(student.id, {
+    const ok = await updateStudent(student.id, {
       fullName:   form.fullName.trim(),
       username:   form.username.trim(),
       university: form.university.trim(),
       phone:      form.phone.trim(),
       avatar,
     });
-    loginStudent(updated);
-    setSaved(true);
+    if (ok) setSaved(true);
+    else setErr('Failed to save. Please try again.');
   }
 
-  function handleAvatarUpload(dataUrl) {
+  async function handleAvatarUpload(dataUrl) {
     setAvatar(dataUrl);
-    const updated = updateStudent(student.id, { avatar: dataUrl });
-    loginStudent(updated);
+    await updateStudent(student.id, { avatar: dataUrl });
   }
 
-  function handleRemoveAvatar() {
+  async function handleRemoveAvatar() {
     setAvatar(null);
-    const updated = updateStudent(student.id, { avatar: null });
-    loginStudent(updated);
+    await updateStudent(student.id, { avatar: null });
   }
 
-  function handleChangePassword(e) {
+  async function handleChangePassword(e) {
     e.preventDefault();
     setPwErr(''); setPwOk('');
     if (pwForm.current !== student.password) { setPwErr('Current password is incorrect.'); return; }
     if (pwForm.newPw.length < 4) { setPwErr('New password must be at least 4 characters.'); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwErr('Passwords do not match.'); return; }
-    const updated = updateStudent(student.id, { password: pwForm.newPw });
-    loginStudent(updated);
-    setPwForm({ current: '', newPw: '', confirm: '' });
-    setPwOk('Password changed successfully.');
+    const ok = await updateStudent(student.id, { password: pwForm.newPw });
+    if (ok) { setPwForm({ current: '', newPw: '', confirm: '' }); setPwOk('Password changed successfully.'); }
+    else setPwErr('Failed to update password. Please try again.');
   }
 
   const bonusPoints = [...(student.bonusPoints || [])].sort((a, b) => b.date.localeCompare(a.date));
