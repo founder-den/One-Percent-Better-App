@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
 import { Card, Button, SectionHeading, Input, Modal, Alert, Avatar, Badge } from '../../components/ui.jsx';
@@ -29,111 +29,257 @@ function MultilineText({ text, className = '' }) {
 }
 
 // ─── Shared: fullscreen tap overlay ──────────────────────────────
-function TasbihCounterOverlay({ title, count, target, isDone, celebration, onTap, onClose }) {
+function TasbihCounterOverlay({ title, count, target, isDone, onTap, onClose }) {
   const pct = target > 0 ? Math.min(100, Math.round((count / target) * 100)) : 0;
+
+  const [pos, setPos]                     = useState(null); // null = centered; {x,y} = abs center in container
+  const [size, setSize]                   = useState(176);
+  const [flash, setFlash]                 = useState(false);
+  const [mashallahVisible, setMashallah]  = useState(false);
+
+  const containerRef = useRef(null);
+  const dragState    = useRef(null);
+  const posRef       = useRef(null);
+  const sizeRef      = useRef(176);
+  const wasDone      = useRef(isDone);
+
+  useEffect(() => { sizeRef.current = size; }, [size]);
+  useEffect(() => { posRef.current = pos; },  [pos]);
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
+  // Show ما شاء الله when target first reached during this session
+  useEffect(() => {
+    if (isDone && !wasDone.current) {
+      setMashallah(true);
+      setTimeout(() => setMashallah(false), 2000);
+    }
+    wasDone.current = isDone;
+  }, [isDone]);
+
+  // Global drag listeners — installed once, read everything via refs
+  useEffect(() => {
+    function move(clientX, clientY) {
+      if (!dragState.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const dx   = (clientX - rect.left) - dragState.current.startMX;
+      const dy   = (clientY - rect.top)  - dragState.current.startMY;
+      const half = (sizeRef.current + 32) / 2;
+      const newX = Math.max(half, Math.min(rect.width  - half, dragState.current.startBX + dx));
+      const newY = Math.max(half, Math.min(rect.height - half, dragState.current.startBY + dy));
+      posRef.current = { x: newX, y: newY };
+      setPos({ x: newX, y: newY });
+    }
+    function onMouseMove(e)  { move(e.clientX, e.clientY); }
+    function onMouseUp()     { dragState.current = null; }
+    function onTouchMove(e)  {
+      if (!dragState.current) return;
+      e.preventDefault();
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }
+    function onTouchEnd()    { dragState.current = null; }
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup',   onMouseUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend',  onTouchEnd);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup',   onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend',  onTouchEnd);
+    };
+  }, []);
+
+  function startDrag(clientX, clientY) {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cur  = posRef.current;
+    dragState.current = {
+      startMX: clientX - rect.left,
+      startMY: clientY - rect.top,
+      startBX: cur ? cur.x : rect.width  / 2,
+      startBY: cur ? cur.y : rect.height / 2,
+    };
+  }
+
+  function handleTap(e) {
+    e.stopPropagation();
+    if (isDone || dragState.current) return;
+    onTap(1);
+    setFlash(true);
+    setTimeout(() => setFlash(false), 150);
+  }
+
+  const outerSize = size + 32;
+  const outerR    = outerSize / 2;
+  const dotR      = 3;
+  const dots      = Array.from({ length: 8 }, (_, i) => {
+    const angle = (i * 45 - 90) * (Math.PI / 180);
+    const r     = outerR - dotR - 1;
+    return { left: outerR + r * Math.cos(angle) - dotR, top: outerR + r * Math.sin(angle) - dotR };
+  });
+
+  const innerBg   = flash ? 'rgba(220,175,60,0.85)' : isDone ? 'transparent' : 'var(--gold)';
+  const countSize = size >= 200 ? '4rem' : size >= 160 ? '3.5rem' : size >= 130 ? '2.5rem' : '2rem';
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(10,8,5,0.96)' }}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 px-5 pt-6 pb-3">
-        <div className="min-w-0">
-          <p className="text-white font-semibold text-lg leading-snug">{title}</p>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--gold)' }}>
-            {count.toLocaleString()} / {target.toLocaleString()}
+    <div
+      className="tasbih-overlay-anim fixed inset-0 z-50 flex flex-col"
+      style={{ background: 'rgba(0,0,0,0.85)' }}
+    >
+      <style>{`
+        @keyframes tasbih-overlay-in {
+          from { opacity: 0; transform: scale(0.95); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        .tasbih-overlay-anim { animation: tasbih-overlay-in 0.2s ease forwards; }
+      `}</style>
+
+      <div className="flex flex-col flex-1 m-2 rounded-2xl overflow-hidden"
+        style={{ border: '1px solid rgba(45,106,79,0.3)' }}>
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 px-5 pt-6 pb-3">
+          <div className="min-w-0">
+            <p style={{ color: 'var(--text, #fff)', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: '1.125rem', lineHeight: 1.3 }}>
+              {title}
+            </p>
+            <p style={{ color: 'var(--gold)', fontSize: '0.875rem', marginTop: 2 }}>
+              {count.toLocaleString()} / {target.toLocaleString()}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >✕</button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="px-5 pb-3">
+          <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: 'var(--surface)' }}>
+            <div className="h-2 rounded-full transition-all duration-300"
+              style={{ width: `${pct}%`, background: 'var(--gold)' }} />
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textAlign: 'right', marginTop: 4 }}>{pct}%</p>
+        </div>
+
+        {/* ما شاء الله */}
+        {mashallahVisible && (
+          <p style={{ textAlign: 'center', color: 'var(--gold)', fontFamily: 'DM Sans, sans-serif', fontWeight: 600, fontSize: '1.25rem', marginBottom: 8 }}>
+            ما شاء الله
           </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors text-lg leading-none"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="px-5 pb-3">
-        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-          <div
-            className="h-2 rounded-full transition-all duration-300"
-            style={{ width: `${pct}%`, background: 'var(--gold)' }}
-          />
-        </div>
-        <p className="text-xs text-white/40 text-right mt-1">{pct}%</p>
-      </div>
-
-      {/* Celebration banner */}
-      {celebration && (
-        <div
-          className="mx-5 mb-3 text-center text-sm font-semibold py-2 px-3 rounded-lg"
-          style={{ background: 'var(--gold-subtle)', color: 'var(--gold)', border: '1px solid var(--gold-d)' }}
-        >
-          {celebration}
-        </div>
-      )}
-
-      {/* Main tap button */}
-      <div className="flex-1 flex items-center justify-center">
-        <button
-          onClick={() => !isDone && onTap(1)}
-          className="rounded-full flex flex-col items-center justify-center select-none transition-transform active:scale-95 shadow-2xl"
-          style={{
-            width: 176,
-            height: 176,
-            background: isDone ? 'rgba(255,255,255,0.05)' : 'var(--gold)',
-            border: isDone ? '3px solid var(--gold)' : 'none',
-            cursor: isDone ? 'default' : 'pointer',
-          }}
-        >
-          <span
-            className="font-serif font-bold leading-none"
-            style={{ fontSize: '3.5rem', color: isDone ? 'var(--gold)' : 'var(--bg)' }}
-          >
-            {count.toLocaleString()}
-          </span>
-          {isDone && (
-            <span style={{ color: 'var(--gold)', fontSize: '0.85rem', marginTop: 4, fontWeight: 600 }}>
-              Done ✓
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Bottom quick-add buttons */}
-      <div className="flex gap-3 justify-center pb-12 pt-4">
-        {!isDone ? (
-          [10, 50, 100].map(n => (
-            <button
-              key={n}
-              onClick={() => onTap(n)}
-              className="px-5 py-2.5 rounded-xl text-white text-sm font-medium transition-all active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
-            >
-              +{n}
-            </button>
-          ))
-        ) : (
-          <p className="text-white/40 text-sm py-2.5">Goal reached! Tap ✕ to close.</p>
         )}
+
+        {/* Draggable double-ring tap button */}
+        <div ref={containerRef} className="flex-1 relative" style={{ minHeight: outerSize + 20 }}>
+          <div
+            style={{
+              position: 'absolute',
+              left:      pos ? pos.x - outerSize / 2 : '50%',
+              top:       pos ? pos.y - outerSize / 2 : '50%',
+              transform: pos ? 'none' : 'translate(-50%, -50%)',
+              width: outerSize, height: outerSize,
+              cursor: 'grab', touchAction: 'none', userSelect: 'none',
+            }}
+            onMouseDown={e => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+            onTouchStart={e => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+          >
+            {/* Outer ring */}
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid var(--gold)', pointerEvents: 'none' }} />
+            {/* 8 dot decorations */}
+            {dots.map((d, i) => (
+              <span key={i} style={{ position: 'absolute', width: dotR * 2, height: dotR * 2, borderRadius: '50%', background: 'var(--gold)', left: d.left, top: d.top, pointerEvents: 'none' }} />
+            ))}
+            {/* Inner filled circle */}
+            <div
+              onClick={handleTap}
+              style={{
+                position: 'absolute', top: 16, left: 16,
+                width: size, height: size, borderRadius: '50%',
+                background: innerBg,
+                border: isDone ? '2px solid var(--gold)' : 'none',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 30px rgba(45,106,79,0.3)',
+                cursor: isDone ? 'default' : 'pointer',
+                transform: flash ? 'scale(0.93)' : 'scale(1)',
+                transition: 'transform 0.15s ease, background 0.1s',
+              }}
+            >
+              <span style={{ fontSize: countSize, fontWeight: 700, color: isDone ? 'var(--gold)' : '#fff', fontFamily: 'DM Sans, sans-serif', lineHeight: 1, letterSpacing: '-0.02em' }}>
+                {count.toLocaleString()}
+              </span>
+              {isDone && (
+                <span style={{ color: 'var(--gold)', fontSize: '0.85rem', marginTop: 4, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
+                  Done ✓
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Quick-add buttons */}
+        <div className="flex gap-3 justify-center pt-4 pb-3">
+          {!isDone ? (
+            [10, 50, 100].map(n => (
+              <button
+                key={n}
+                onClick={() => onTap(n)}
+                style={{ padding: '10px 20px', borderRadius: 12, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '0.875rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+                onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.95)'; }}
+                onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              >+{n}</button>
+            ))
+          ) : (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', padding: '10px 0' }}>
+              Goal reached! Tap ✕ to close.
+            </p>
+          )}
+        </div>
+
+        {/* Size controls */}
+        <div className="flex items-center gap-3 justify-center pb-10">
+          {[['−', -20, 120], ['+', 20, 240]].map(([label, delta, limit]) => (
+            <button
+              key={label}
+              onClick={() => setSize(s => delta < 0 ? Math.max(limit, s + delta) : Math.min(limit, s + delta))}
+              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: 'rgba(255,255,255,0.6)', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'DM Sans, sans-serif' }}
+            >{label}</button>
+          ))}
+        </div>
+
       </div>
     </div>
   );
 }
 
-// ─── Expand trigger button (round gold circle) ────────────────────
+// ─── Expand trigger button ────────────────────────────────────────
 function ExpandButton({ onClick }) {
+  const [hov, setHov] = useState(false);
   return (
     <button
       onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       title="Open counter"
-      className="flex-shrink-0 flex items-center justify-center rounded-full transition-opacity hover:opacity-80 active:scale-95"
-      style={{ width: 36, height: 36, background: 'var(--gold)', color: '#fff', fontSize: '1rem' }}
+      className="flex-shrink-0 flex flex-col items-center gap-0.5"
+      style={{
+        background: 'transparent',
+        border: `1px solid ${hov ? 'var(--gold)' : 'var(--border)'}`,
+        borderRadius: 8,
+        padding: '4px 8px',
+        cursor: 'pointer',
+        transition: 'border-color 0.15s',
+      }}
     >
-      📿
+      <span style={{ fontSize: '1rem', color: hov ? 'var(--gold)' : 'var(--text-muted)', transition: 'color 0.15s' }}>📿</span>
+      <span style={{ fontSize: 10, color: hov ? 'var(--gold)' : 'var(--text-muted)', transition: 'color 0.15s', lineHeight: 1.2 }}>
+        Tap to count
+      </span>
     </button>
   );
 }
