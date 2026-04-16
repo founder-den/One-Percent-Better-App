@@ -28,6 +28,116 @@ function MultilineText({ text, className = '' }) {
   return <p className={`whitespace-pre-wrap ${className}`}>{text}</p>;
 }
 
+// ─── Shared: fullscreen tap overlay ──────────────────────────────
+function TasbihCounterOverlay({ title, count, target, isDone, celebration, onTap, onClose }) {
+  const pct = target > 0 ? Math.min(100, Math.round((count / target) * 100)) : 0;
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(10,8,5,0.96)' }}>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3 px-5 pt-6 pb-3">
+        <div className="min-w-0">
+          <p className="text-white font-semibold text-lg leading-snug">{title}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--gold)' }}>
+            {count.toLocaleString()} / {target.toLocaleString()}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors text-lg leading-none"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-5 pb-3">
+        <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+          <div
+            className="h-2 rounded-full transition-all duration-300"
+            style={{ width: `${pct}%`, background: 'var(--gold)' }}
+          />
+        </div>
+        <p className="text-xs text-white/40 text-right mt-1">{pct}%</p>
+      </div>
+
+      {/* Celebration banner */}
+      {celebration && (
+        <div
+          className="mx-5 mb-3 text-center text-sm font-semibold py-2 px-3 rounded-lg"
+          style={{ background: 'var(--gold-subtle)', color: 'var(--gold)', border: '1px solid var(--gold-d)' }}
+        >
+          {celebration}
+        </div>
+      )}
+
+      {/* Main tap button */}
+      <div className="flex-1 flex items-center justify-center">
+        <button
+          onClick={() => !isDone && onTap(1)}
+          className="rounded-full flex flex-col items-center justify-center select-none transition-transform active:scale-95 shadow-2xl"
+          style={{
+            width: 176,
+            height: 176,
+            background: isDone ? 'rgba(255,255,255,0.05)' : 'var(--gold)',
+            border: isDone ? '3px solid var(--gold)' : 'none',
+            cursor: isDone ? 'default' : 'pointer',
+          }}
+        >
+          <span
+            className="font-serif font-bold leading-none"
+            style={{ fontSize: '3.5rem', color: isDone ? 'var(--gold)' : 'var(--bg)' }}
+          >
+            {count.toLocaleString()}
+          </span>
+          {isDone && (
+            <span style={{ color: 'var(--gold)', fontSize: '0.85rem', marginTop: 4, fontWeight: 600 }}>
+              Done ✓
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Bottom quick-add buttons */}
+      <div className="flex gap-3 justify-center pb-12 pt-4">
+        {!isDone ? (
+          [10, 50, 100].map(n => (
+            <button
+              key={n}
+              onClick={() => onTap(n)}
+              className="px-5 py-2.5 rounded-xl text-white text-sm font-medium transition-all active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
+            >
+              +{n}
+            </button>
+          ))
+        ) : (
+          <p className="text-white/40 text-sm py-2.5">Goal reached! Tap ✕ to close.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Expand trigger button (round gold circle) ────────────────────
+function ExpandButton({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Open counter"
+      className="flex-shrink-0 flex items-center justify-center rounded-full transition-opacity hover:opacity-80 active:scale-95"
+      style={{ width: 36, height: 36, background: 'var(--gold)', color: '#fff', fontSize: '1rem' }}
+    >
+      📿
+    </button>
+  );
+}
+
 // ─── Shared: "Updated X" label for reading tracker ───────────────
 function lastUpdatedLabel(dateStr) {
   if (!dateStr) return null;
@@ -54,6 +164,7 @@ function PersonalTemplateGoal({ template, student }) {
   const { getPersonalTplProgress, savePersonalTplProgress } = useApp();
   const [data, setData] = useState(() => getPersonalTplProgress(student.id, template.id));
   const [celebration, setCelebration] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   const count  = data.count || 0;
   const target = template.target || 100;
@@ -79,31 +190,47 @@ function PersonalTemplateGoal({ template, student }) {
   }
 
   return (
-    <div className={`p-4 rounded-lg border ${isDone ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'} mt-3`}>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-primary">{template.title}</p>
-          {template.description && (
-            <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{template.description}</p>
-          )}
-        </div>
-        {isDone && <span className="text-xs text-gold font-bold flex-shrink-0">✓ Done</span>}
-      </div>
-      {celebration && (
-        <div className="text-center text-xs font-semibold text-gold py-1 px-2 rounded bg-[var(--gold-subtle)] mb-2">
-          {celebration}
-        </div>
+    <>
+      {expanded && (
+        <TasbihCounterOverlay
+          title={template.title}
+          count={count}
+          target={target}
+          isDone={isDone}
+          celebration={celebration}
+          onTap={tap}
+          onClose={() => setExpanded(false)}
+        />
       )}
-      <ProgressBar value={count} max={target} className="mb-1" />
-      <p className="text-xs text-muted mb-2">{count.toLocaleString()} / {target.toLocaleString()} ({pct}%)</p>
-      <div className="flex gap-1.5 flex-wrap">
-        <Button size="xs" variant="outline" onClick={() => tap(1)}>+1</Button>
-        <Button size="xs" variant="outline" onClick={() => tap(10)}>+10</Button>
-        <Button size="xs" variant="outline" onClick={() => tap(50)}>+50</Button>
-        <Button size="xs" variant="outline" onClick={() => tap(100)}>+100</Button>
-        <Button size="xs" variant="ghost" onClick={reset}>Reset</Button>
+      <div className={`p-4 rounded-lg border ${isDone ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'} mt-3`}>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-primary">{template.title}</p>
+            {template.description && (
+              <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{template.description}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isDone && <span className="text-xs text-gold font-bold">✓ Done</span>}
+            <ExpandButton onClick={() => setExpanded(true)} />
+          </div>
+        </div>
+        {celebration && (
+          <div className="text-center text-xs font-semibold text-gold py-1 px-2 rounded bg-[var(--gold-subtle)] mb-2">
+            {celebration}
+          </div>
+        )}
+        <ProgressBar value={count} max={target} className="mb-1" />
+        <p className="text-xs text-muted mb-2">{count.toLocaleString()} / {target.toLocaleString()} ({pct}%)</p>
+        <div className="flex gap-1.5 flex-wrap">
+          <Button size="xs" variant="outline" onClick={() => tap(1)}>+1</Button>
+          <Button size="xs" variant="outline" onClick={() => tap(10)}>+10</Button>
+          <Button size="xs" variant="outline" onClick={() => tap(50)}>+50</Button>
+          <Button size="xs" variant="outline" onClick={() => tap(100)}>+100</Button>
+          <Button size="xs" variant="ghost" onClick={reset}>Reset</Button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -111,6 +238,7 @@ function PersonalTemplateGoal({ template, student }) {
 function StudentTasbihCard({ pt, studentId }) {
   const { updatePersonalTasbih, deletePersonalTasbih } = useApp();
   const [celebration, setCelebration] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   const current = pt.current || 0;
   const target  = pt.target  || 100;
@@ -135,7 +263,19 @@ function StudentTasbihCard({ pt, studentId }) {
   const RESET_LABELS = { none: '', daily: 'Daily reset', weekly: 'Weekly reset' };
 
   return (
-    <div className={`p-4 rounded-lg border ${isDone ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'} mt-3`}>
+    <>
+      {expanded && (
+        <TasbihCounterOverlay
+          title={pt.title}
+          count={current}
+          target={target}
+          isDone={isDone}
+          celebration={celebration}
+          onTap={tap}
+          onClose={() => setExpanded(false)}
+        />
+      )}
+      <div className={`p-4 rounded-lg border ${isDone ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'} mt-3`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-primary">{pt.title}</p>
@@ -145,6 +285,7 @@ function StudentTasbihCard({ pt, studentId }) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {isDone && <span className="text-xs text-gold font-bold">Done</span>}
+          <ExpandButton onClick={() => setExpanded(true)} />
           <button
             onClick={() => { if (window.confirm(`Delete "${pt.title}"?`)) deletePersonalTasbih(studentId, pt.id); }}
             className="text-xs text-muted hover:text-danger transition-colors"
@@ -167,6 +308,7 @@ function StudentTasbihCard({ pt, studentId }) {
         <Button size="xs" variant="ghost" onClick={reset}>Reset</Button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -358,6 +500,7 @@ export function PersonalTasbih() {
 function GlobalTasbihCard({ tasbih, groupId }) {
   const { tapGlobalTasbih } = useApp();
   const [celebration, setCelebration] = useState('');
+  const [expanded, setExpanded] = useState(false);
 
   const visible =
     tasbih.groupScope === 'all' ||
@@ -379,38 +522,56 @@ function GlobalTasbihCard({ tasbih, groupId }) {
       ? Math.min(100, Math.round((tasbih.current / tasbih.target) * 100))
       : 0;
 
+  const isDone = tasbih.current >= tasbih.target;
+
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-primary">{tasbih.title}</p>
-          {tasbih.description && (
-            <MultilineText text={tasbih.description} className="text-xs text-muted mt-0.5" />
-          )}
-        </div>
-        {tasbih.completedTimes > 0 && (
-          <Badge variant="gold">{tasbih.completedTimes}×</Badge>
-        )}
-      </div>
-
-      {celebration && (
-        <div className="text-center text-sm font-semibold text-gold py-2 px-3 rounded-lg bg-[var(--gold-subtle)] border border-gold-d mb-3">
-          {celebration}
-        </div>
+    <>
+      {expanded && (
+        <TasbihCounterOverlay
+          title={tasbih.title}
+          count={tasbih.current}
+          target={tasbih.target}
+          isDone={isDone}
+          celebration={celebration}
+          onTap={tap}
+          onClose={() => setExpanded(false)}
+        />
       )}
+      <Card>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-primary">{tasbih.title}</p>
+            {tasbih.description && (
+              <MultilineText text={tasbih.description} className="text-xs text-muted mt-0.5" />
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {tasbih.completedTimes > 0 && (
+              <Badge variant="gold">{tasbih.completedTimes}×</Badge>
+            )}
+            <ExpandButton onClick={() => setExpanded(true)} />
+          </div>
+        </div>
 
-      <ProgressBar value={tasbih.current} max={tasbih.target} className="mb-1" />
-      <p className="text-xs text-muted text-right mb-3">
-        {tasbih.current.toLocaleString()} / {tasbih.target.toLocaleString()} ({pct}%)
-      </p>
+        {celebration && (
+          <div className="text-center text-sm font-semibold text-gold py-2 px-3 rounded-lg bg-[var(--gold-subtle)] border border-gold-d mb-3">
+            {celebration}
+          </div>
+        )}
 
-      <div className="flex gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => tap(1)}>+1</Button>
-        <Button variant="outline" size="sm" onClick={() => tap(10)}>+10</Button>
-        <Button variant="outline" size="sm" onClick={() => tap(50)}>+50</Button>
-        <Button variant="outline" size="sm" onClick={() => tap(100)}>+100</Button>
-      </div>
-    </Card>
+        <ProgressBar value={tasbih.current} max={tasbih.target} className="mb-1" />
+        <p className="text-xs text-muted text-right mb-3">
+          {tasbih.current.toLocaleString()} / {tasbih.target.toLocaleString()} ({pct}%)
+        </p>
+
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => tap(1)}>+1</Button>
+          <Button variant="outline" size="sm" onClick={() => tap(10)}>+10</Button>
+          <Button variant="outline" size="sm" onClick={() => tap(50)}>+50</Button>
+          <Button variant="outline" size="sm" onClick={() => tap(100)}>+100</Button>
+        </div>
+      </Card>
+    </>
   );
 }
 
