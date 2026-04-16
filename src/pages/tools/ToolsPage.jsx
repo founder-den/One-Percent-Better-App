@@ -7,12 +7,11 @@ import {
   PersonalTasbih,
   GlobalTasbihSection,
   ReadingTrackerSection,
-  ProgramsSection,
 } from '../student/ToolsTab.jsx';
 
 export default function ToolsPage() {
   const { student } = useAuth();
-  const { programsLabel, studentsForGroup } = useApp();
+  const { studentsForGroup } = useApp();
   const [activeTab, setActiveTab] = useState('tasbih');
 
   if (!student) {
@@ -44,20 +43,18 @@ export default function ToolsPage() {
   const groupmates = studentsForGroup(student.groupId).filter(s => s.id !== student.id);
 
   const TABS = [
-    { key: 'tasbih',   label: 'Tasbih' },
-    { key: 'global',   label: 'Global Tasbih' },
-    { key: 'reading',  label: 'Reading Tracker' },
-    { key: 'programs', label: programsLabel || 'Programs' },
+    { key: 'tasbih',  label: 'Tasbih' },
+    { key: 'global',  label: 'Global Tasbih' },
+    { key: 'reading', label: 'Reading Tracker' },
   ];
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
       <div className="mt-6">
-        {activeTab === 'tasbih'   && <PersonalTasbih />}
-        {activeTab === 'global'   && <GlobalTasbihSection groupId={student.groupId} />}
-        {activeTab === 'reading'  && <ReadingTrackerSection student={student} groupmates={groupmates} />}
-        {activeTab === 'programs' && <ProgramsSection student={student} groupId={student.groupId} />}
+        {activeTab === 'tasbih'  && <PersonalTasbih />}
+        {activeTab === 'global'  && <GlobalTasbihSection groupId={student.groupId} />}
+        {activeTab === 'reading' && <ReadingTrackerSection student={student} groupmates={groupmates} />}
       </div>
     </div>
   );

@@ -125,6 +125,32 @@ function mapProgram(row) {
   };
 }
 
+function mapChallenge(row) {
+  return {
+    id:               row.id,
+    name:             row.name,
+    description:      row.description      || '',
+    code:             row.code             || null,
+    isPrivate:        row.is_private       ?? false,
+    isVisible:        row.is_visible       ?? false,
+    visibleToGroups:  row.visible_to_groups || [],
+    startDate:        row.start_date       || '',
+    endDate:          row.end_date         || '',
+    isActive:         row.is_active        ?? true,
+    activities:       row.activities       || [],
+    createdAt:        row.created_at       || '',
+  };
+}
+
+function mapChallengeMembership(row) {
+  return {
+    id:          row.id,
+    challengeId: row.challenge_id,
+    studentId:   row.student_id,
+    joinedAt:    row.joined_at || '',
+  };
+}
+
 // ─── ENSURE COMMUNITY ─────────────────────────────────────────────
 let _communityId = null;
 
@@ -195,21 +221,24 @@ export async function loadAll() {
     'students', 'submissions', 'bonus_points', 'books', 'program_completions',
     'activities', 'periods', 'global_tasbihs', 'personal_tasbih_templates',
     'programs', 'collective_task_counts', 'admin_settings',
+    'challenges', 'challenge_memberships',
   ];
 
   const [
-    { data: studentRows,    error: e1  },
-    { data: submissionRows, error: e2  },
-    { data: bonusRows,      error: e3  },
-    { data: bookRows,       error: e4  },
-    { data: completionRows, error: e5  },
-    { data: activityRows,   error: e6  },
-    { data: periodRows,     error: e7  },
-    { data: tasbihRows,     error: e8  },
-    { data: templateRows,   error: e9  },
-    { data: programRows,    error: e10 },
-    { data: ctcRows,        error: e11 },
-    { data: settingsRow,    error: e12 },
+    { data: studentRows,     error: e1  },
+    { data: submissionRows,  error: e2  },
+    { data: bonusRows,       error: e3  },
+    { data: bookRows,        error: e4  },
+    { data: completionRows,  error: e5  },
+    { data: activityRows,    error: e6  },
+    { data: periodRows,      error: e7  },
+    { data: tasbihRows,      error: e8  },
+    { data: templateRows,    error: e9  },
+    { data: programRows,     error: e10 },
+    { data: ctcRows,         error: e11 },
+    { data: settingsRow,     error: e12 },
+    { data: challengeRows,   error: e13 },
+    { data: membershipRows,  error: e14 },
     community,
     groups,
   ] = await Promise.all([
@@ -225,11 +254,13 @@ export async function loadAll() {
     supabase.from('programs').select('*'),
     supabase.from('collective_task_counts').select('*'),
     supabase.from('admin_settings').select('*').eq('id', 'main').maybeSingle(),
+    supabase.from('challenges').select('*'),
+    supabase.from('challenge_memberships').select('*'),
     dbLoadCommunity(),
     dbLoadGroups(),
   ]);
 
-  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12].forEach((e, i) => {
+  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14].forEach((e, i) => {
     if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
@@ -259,12 +290,14 @@ export async function loadAll() {
     adminSettings,
     groups,
     students,
-    activities:              (activityRows  || []).map(mapActivity),
-    periods:                 (periodRows    || []).map(mapPeriod),
-    globalTasbihs:           (tasbihRows    || []).map(mapGlobalTasbih),
-    personalTasbihTemplates: (templateRows  || []).map(mapPersonalTemplate),
-    programs:                (programRows   || []).map(mapProgram),
+    activities:              (activityRows    || []).map(mapActivity),
+    periods:                 (periodRows      || []).map(mapPeriod),
+    globalTasbihs:           (tasbihRows      || []).map(mapGlobalTasbih),
+    personalTasbihTemplates: (templateRows    || []).map(mapPersonalTemplate),
+    programs:                (programRows     || []).map(mapProgram),
     collectiveTaskCounts,
+    challenges:              (challengeRows   || []).map(mapChallenge),
+    challengeMemberships:    (membershipRows  || []).map(mapChallengeMembership),
   };
 }
 
@@ -768,6 +801,116 @@ export async function dbUpdateCollectiveTask(taskId, count, completedTimes) {
   );
   if (error) { console.error('[db] updateCollectiveTask — Supabase write FAILED:', error); return false; }
   return true;
+}
+
+// ─── CHALLENGES ───────────────────────────────────────────────────
+export async function dbLoadChallenges() {
+  console.log('[db] dbLoadChallenges — fetching from Supabase');
+  try {
+    const { data, error } = await supabase.from('challenges').select('*');
+    if (error) throw error;
+    return (data || []).map(mapChallenge);
+  } catch (e) {
+    console.error('[db] dbLoadChallenges — Supabase error:', e);
+    return [];
+  }
+}
+
+export async function dbAddChallenge(challenge) {
+  console.log('[db] addChallenge:', challenge.name);
+  const { error } = await supabase.from('challenges').insert({
+    id:                challenge.id,
+    name:              challenge.name,
+    description:       challenge.description      || '',
+    code:              challenge.code             || null,
+    is_private:        challenge.isPrivate        ?? false,
+    is_visible:        challenge.isVisible        ?? false,
+    visible_to_groups: challenge.visibleToGroups  || [],
+    start_date:        challenge.startDate        || '',
+    end_date:          challenge.endDate          || '',
+    is_active:         challenge.isActive         ?? true,
+    activities:        challenge.activities       || [],
+  });
+  if (error) { console.error('[db] addChallenge — Supabase write FAILED:', error); return null; }
+  return challenge;
+}
+
+export async function dbUpdateChallenge(id, fields) {
+  console.log('[db] updateChallenge:', id);
+  const row = {};
+  if (fields.name             !== undefined) row.name               = fields.name;
+  if (fields.description      !== undefined) row.description        = fields.description;
+  if (fields.code             !== undefined) row.code               = fields.code;
+  if (fields.isPrivate        !== undefined) row.is_private         = fields.isPrivate;
+  if (fields.isVisible        !== undefined) row.is_visible         = fields.isVisible;
+  if (fields.visibleToGroups  !== undefined) row.visible_to_groups  = fields.visibleToGroups;
+  if (fields.startDate        !== undefined) row.start_date         = fields.startDate;
+  if (fields.endDate          !== undefined) row.end_date           = fields.endDate;
+  if (fields.isActive         !== undefined) row.is_active          = fields.isActive;
+  if (fields.activities       !== undefined) row.activities         = fields.activities;
+
+  const { error } = await supabase.from('challenges').update(row).eq('id', id);
+  if (error) { console.error('[db] updateChallenge — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+export async function dbDeleteChallenge(id) {
+  console.log('[db] deleteChallenge:', id);
+  const { error } = await supabase.from('challenges').delete().eq('id', id);
+  if (error) { console.error('[db] deleteChallenge — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+// ─── CHALLENGE MEMBERSHIPS ────────────────────────────────────────
+export async function dbJoinChallenge(challengeId, studentId) {
+  console.log('[db] joinChallenge:', challengeId, studentId);
+  // Check for duplicate
+  const { data: existing } = await supabase
+    .from('challenge_memberships')
+    .select('id')
+    .eq('challenge_id', challengeId)
+    .eq('student_id', studentId)
+    .maybeSingle();
+  if (existing) return { id: existing.id, challengeId, studentId };
+
+  const id = generateId();
+  const { error } = await supabase.from('challenge_memberships').insert({
+    id,
+    challenge_id: challengeId,
+    student_id:   studentId,
+  });
+  if (error) { console.error('[db] joinChallenge — Supabase write FAILED:', error); return null; }
+  return { id, challengeId, studentId };
+}
+
+export async function dbLoadStudentChallenges(studentId) {
+  console.log('[db] loadStudentChallenges:', studentId);
+  try {
+    const { data, error } = await supabase
+      .from('challenge_memberships')
+      .select('*')
+      .eq('student_id', studentId);
+    if (error) throw error;
+    return (data || []).map(mapChallengeMembership);
+  } catch (e) {
+    console.error('[db] loadStudentChallenges — Supabase error:', e);
+    return [];
+  }
+}
+
+export async function dbLoadChallengeMemberships(challengeId) {
+  console.log('[db] loadChallengeMemberships:', challengeId);
+  try {
+    const { data, error } = await supabase
+      .from('challenge_memberships')
+      .select('*')
+      .eq('challenge_id', challengeId);
+    if (error) throw error;
+    return (data || []).map(mapChallengeMembership);
+  } catch (e) {
+    console.error('[db] loadChallengeMemberships — Supabase error:', e);
+    return [];
+  }
 }
 
 // ─── Realtime subscriptions ───────────────────────────────────────

@@ -221,3 +221,41 @@ ALTER TABLE personal_tasbih_templates
 --
 -- If you don't have superuser access, enable them in the Supabase
 -- Dashboard under Database → Replication → Tables.
+
+
+-- ─── challenges ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS challenges (
+  id                text      PRIMARY KEY,
+  name              text      NOT NULL,
+  description       text      DEFAULT '',
+  code              text,
+  is_private        boolean   DEFAULT false,
+  is_visible        boolean   DEFAULT false,
+  visible_to_groups jsonb     DEFAULT '[]',
+  start_date        text      DEFAULT '',
+  end_date          text      DEFAULT '',
+  is_active         boolean   DEFAULT true,
+  activities        jsonb     DEFAULT '[]',
+  created_at        timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS challenge_memberships (
+  id           text        PRIMARY KEY,
+  challenge_id text        REFERENCES challenges(id) ON DELETE CASCADE,
+  student_id   text,
+  joined_at    timestamptz DEFAULT now()
+);
+
+ALTER TABLE challenges            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE challenge_memberships ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "anon_all" ON challenges;
+DROP POLICY IF EXISTS "anon_all" ON challenge_memberships;
+
+CREATE POLICY "anon_all" ON challenges            FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_all" ON challenge_memberships FOR ALL TO anon USING (true) WITH CHECK (true);
+
+GRANT ALL ON challenges            TO anon;
+GRANT ALL ON challenge_memberships TO anon;
+
+NOTIFY pgrst, 'reload schema';

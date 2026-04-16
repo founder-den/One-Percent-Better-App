@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Wrench, User, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, Trophy, Wrench, BookOpen, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth }  from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { Avatar }   from './ui.jsx';
@@ -22,9 +22,10 @@ export { AppLogo };
 
 // ─── Nav links ────────────────────────────────────────────────────
 const NAV_LINKS = [
-  { to: '/student',          label: 'Home',      Icon: Home   },
-  { to: '/challenge',        label: 'Challenge', Icon: Trophy },
-  { to: '/tools',            label: 'Tools',     Icon: Wrench },
+  { to: '/student',   label: 'Home',      Icon: Home     },
+  { to: '/challenge', label: 'Challenge', Icon: Trophy   },
+  { to: '/programs',  label: 'Programs',  Icon: BookOpen },
+  { to: '/tools',     label: 'Tools',     Icon: Wrench   },
 ];
 
 // ─── Collapse state (persisted) ───────────────────────────────────
@@ -134,14 +135,6 @@ export default function Navbar() {
             <span className="mobile-tab-label">{label}</span>
           </NavLink>
         ))}
-        {/* Profile — links to /student?tab=profile */}
-        <NavLink
-          to="/student?tab=profile"
-          className={({ isActive }) => `mobile-tab${isActive ? ' mobile-tab--active' : ''}`}
-        >
-          <User size={20} strokeWidth={1.75} />
-          <span className="mobile-tab-label">Profile</span>
-        </NavLink>
       </nav>
     </>
   );

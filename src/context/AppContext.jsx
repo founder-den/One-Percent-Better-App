@@ -22,6 +22,8 @@ import {
   dbSaveProgramCompletion,
   dbUpdateCollectiveTask,
   dbSavePersonalTasbihs,
+  dbAddChallenge, dbUpdateChallenge, dbDeleteChallenge,
+  dbJoinChallenge,
   subscribeToGlobalTasbihs,
   subscribeToStudents,
   subscribeToSubmissions,
@@ -56,6 +58,8 @@ export function AppProvider({ children }) {
   const [personalTasbihTemplates, setPersonalTemplates]   = useState([]);
   const [programs,                setPrograms]            = useState([]);
   const [collectiveTaskCounts,    setCollectiveCounts]    = useState({});
+  const [challenges,              setChallenges]          = useState([]);
+  const [challengeMemberships,    setChallengeMemberships] = useState([]);
 
   // ── Load everything on mount ──────────────────────────────────
   const reload = useCallback(async () => {
@@ -123,6 +127,8 @@ export function AppProvider({ children }) {
       setPersonalTemplates(data.personalTasbihTemplates);
       setPrograms(data.programs);
       setCollectiveCounts(data.collectiveTaskCounts);
+      setChallenges(data.challenges || []);
+      setChallengeMemberships(data.challengeMemberships || []);
     } catch (err) {
       console.error('[AppContext] load failed:', err);
       setDbError(err.message || 'Failed to load data. Check your connection.');
@@ -600,6 +606,55 @@ export function AppProvider({ children }) {
     setPrograms(p => p.filter(pr => pr.id !== id));
   }, []);
 
+  // ── Challenges ────────────────────────────────────────────────
+  const addChallenge = useCallback(async (fields) => {
+    console.log('[AppContext] addChallenge:', fields.name);
+    const newC = {
+      id:              `ch_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+      name:            fields.name            || 'Challenge',
+      description:     fields.description     || '',
+      code:            fields.code            || null,
+      isPrivate:       fields.isPrivate       ?? false,
+      isVisible:       fields.isVisible       ?? false,
+      visibleToGroups: fields.visibleToGroups || [],
+      startDate:       fields.startDate       || '',
+      endDate:         fields.endDate         || '',
+      isActive:        true,
+      activities:      fields.activities      || [],
+    };
+    const confirmed = await dbAddChallenge(newC);
+    if (!confirmed) { console.error('[AppContext] addChallenge failed — state NOT updated'); return null; }
+    setChallenges(c => [...c, confirmed]);
+    return confirmed;
+  }, []);
+
+  const updateChallenge = useCallback(async (id, fields) => {
+    console.log('[AppContext] updateChallenge:', id);
+    const ok = await dbUpdateChallenge(id, fields);
+    if (!ok) { console.error('[AppContext] updateChallenge failed — state NOT updated'); return; }
+    setChallenges(c => c.map(ch => ch.id === id ? { ...ch, ...fields } : ch));
+  }, []);
+
+  const deleteChallenge = useCallback(async (id) => {
+    console.log('[AppContext] deleteChallenge:', id);
+    const ok = await dbDeleteChallenge(id);
+    if (!ok) { console.error('[AppContext] deleteChallenge failed — state NOT updated'); return; }
+    setChallenges(c => c.filter(ch => ch.id !== id));
+    setChallengeMemberships(m => m.filter(m => m.challengeId !== id));
+  }, []);
+
+  const joinChallenge = useCallback(async (challengeId, studentId) => {
+    console.log('[AppContext] joinChallenge:', challengeId, studentId);
+    const confirmed = await dbJoinChallenge(challengeId, studentId);
+    if (!confirmed) { console.error('[AppContext] joinChallenge failed — state NOT updated'); return null; }
+    setChallengeMemberships(m => {
+      const exists = m.some(x => x.challengeId === challengeId && x.studentId === studentId);
+      if (exists) return m;
+      return [...m, { ...confirmed, joinedAt: new Date().toISOString() }];
+    });
+    return confirmed;
+  }, []);
+
   // ── Program Completions ───────────────────────────────────────
   const getStudentProgramCompletions = useCallback((studentId) => {
     return students.find(s => s.id === studentId)?.programCompletions || [];
@@ -697,6 +752,9 @@ export function AppProvider({ children }) {
       getStudentBooks, addBook, updateBook, removeBook,
       // Programs
       addProgram, updateProgram, deleteProgram,
+      // Challenges
+      challenges, challengeMemberships,
+      addChallenge, updateChallenge, deleteChallenge, joinChallenge,
       // Program Completions
       getStudentProgramCompletions, saveProgramCompletion,
       // Collective Tasks
