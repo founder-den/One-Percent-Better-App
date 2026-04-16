@@ -127,33 +127,62 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
 
 /* ── Sidebar ─────────────────────────────────────── */
 .sidebar {
-  width: 220px;
   flex-shrink: 0;
   background: var(--bg-card);
   border-right: 1px solid var(--border);
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   z-index: 40;
-  transition: background 0.2s, border-color 0.2s;
+  transition: width 0.2s ease, background 0.2s, border-color 0.2s;
 }
 
 @media (max-width: 639px) {
   .sidebar { display: none; }
 }
 
-.sidebar-logo {
-  padding: 16px 16px 14px;
+/* Logo + collapse toggle row */
+.sidebar-logo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 10px 12px 14px;
   flex-shrink: 0;
+  min-height: 56px;
+}
+
+.sidebar-logo-link {
+  display: block;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  color: var(--text);
+  background: var(--surface);
 }
 
 .sidebar-divider {
   height: 1px;
   background: var(--border);
-  margin: 0 12px 8px;
+  margin: 0 10px 8px;
   flex-shrink: 0;
   transition: background 0.2s;
 }
@@ -162,7 +191,7 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 8px;
+  padding: 0 6px;
   flex-shrink: 0;
 }
 
@@ -177,6 +206,8 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
   color: var(--text-muted);
   text-decoration: none;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .sidebar-link:hover {
@@ -189,12 +220,16 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
   color: var(--gold);
 }
 
-.sidebar-spacer {
-  flex: 1;
+/* Collapsed: center the icon */
+.sidebar-link--collapsed {
+  justify-content: center;
+  padding: 8px 0;
 }
 
+.sidebar-spacer { flex: 1; }
+
 .sidebar-bottom {
-  padding: 12px 12px 16px;
+  padding: 10px 8px 14px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -224,6 +259,10 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
   justify-content: space-between;
 }
 
+.sidebar-actions--collapsed {
+  justify-content: center;
+}
+
 .sidebar-logout {
   font-size: 12px;
   color: var(--text-muted);
@@ -245,7 +284,7 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px;
+  padding: 5px;
   border-radius: 6px;
   transition: color 0.15s, background 0.15s;
 }
@@ -267,7 +306,7 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    height: 64px;
     background: var(--bg-card);
     border-top: 1px solid var(--border);
     z-index: 50;
@@ -278,13 +317,22 @@ html.dark select option { background: var(--bg-card2); color: var(--text); }
 
 .mobile-tab {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   flex: 1;
   color: var(--text-muted);
   transition: color 0.15s;
   text-decoration: none;
 }
 
-.mobile-tab--active { color: var(--gold); }
-.mobile-tab:hover   { color: var(--text); }
+.mobile-tab-label {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.mobile-tab--active       { color: var(--gold); }
+.mobile-tab--active .mobile-tab-label { color: var(--gold); }
+.mobile-tab:hover         { color: var(--text); }

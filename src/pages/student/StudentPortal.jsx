@@ -227,7 +227,9 @@ export default function StudentPortal() {
   const [authMode, setAuthMode]    = useState(
     () => searchParams.get('register') === '1' ? 'register' : 'login'
   );
-  const [activeTab, setActiveTab]  = useState('home');
+  const [activeTab, setActiveTab]  = useState(
+    () => searchParams.get('tab') === 'profile' ? 'profile' : 'home'
+  );
 
   if (!student) {
     return authMode === 'login'
