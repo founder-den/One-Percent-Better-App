@@ -11,6 +11,7 @@ export default function StudentsTab({ groupId }) {
   const {
     groups, students,
     approveStudent, deleteStudent, updateStudent, editSubmission, addBonusPoints,
+    addPersonalTasbih, deletePersonalTasbih,
     activitiesForGroup, studentsForGroup,
   } = useApp();
 
@@ -46,6 +47,11 @@ export default function StudentsTab({ groupId }) {
 
   // Password reveal
   const [revealedPw, setRevealedPw] = useState(null); // student id whose password is showing
+
+  // Personal tasbih admin
+  const [ptModal,    setPtModal]    = useState(null); // student
+  const [ptForm,     setPtForm]     = useState({ title: '', target: '', resetType: 'none' });
+  const [ptErr,      setPtErr]      = useState('');
 
   // Bonus points modal
   const [bonusModal,  setBonusModal]  = useState(null); // student
@@ -91,6 +97,22 @@ export default function StudentsTab({ groupId }) {
     }
     updateStudent(infoModal.id, fields);
     setInfoModal(null);
+  }
+
+  // ── Personal tasbihs admin ────────────────────────────────────────
+  function openPt(st) {
+    setPtForm({ title: '', target: '', resetType: 'none' });
+    setPtErr('');
+    setPtModal(st);
+  }
+  function savePt() {
+    setPtErr('');
+    if (!ptForm.title.trim()) { setPtErr('Title is required.'); return; }
+    const target = parseInt(ptForm.target);
+    if (isNaN(target) || target < 1) { setPtErr('Target must be a positive number.'); return; }
+    addPersonalTasbih(ptModal.id, { title: ptForm.title.trim(), target, resetType: ptForm.resetType });
+    setPtForm({ title: '', target: '', resetType: 'none' });
+    setPtErr('');
   }
 
   // ── Bonus points ──────────────────────────────────────────────────
@@ -176,6 +198,7 @@ export default function StudentsTab({ groupId }) {
                 <div className="flex flex-col gap-1 items-end flex-shrink-0">
                   <Button variant="ghost" size="xs" onClick={() => openInfo(st)}>Edit</Button>
                   <Button variant="outline" size="xs" onClick={() => openBonus(st)}>Bonus</Button>
+                  <Button variant="ghost" size="xs" onClick={() => openPt(st)}>Tasbihs</Button>
                   <button
                     onClick={() => setRevealedPw(id => id === st.id ? null : st.id)}
                     title="View password"
@@ -225,6 +248,28 @@ export default function StudentsTab({ groupId }) {
                 </div>
               ) : (
                 <p className="pl-11 text-xs text-muted">No submissions yet.</p>
+              )}
+
+              {/* Personal tasbihs */}
+              {(st.personalTasbihs || []).length > 0 && (
+                <div className="pl-11 mt-2 space-y-1">
+                  <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Personal Tasbihs</p>
+                  {(st.personalTasbihs || []).map(pt => {
+                    const pct = pt.target > 0 ? Math.min(100, Math.round((pt.current / pt.target) * 100)) : 0;
+                    return (
+                      <div key={pt.id} className="flex items-center gap-2 text-xs text-muted">
+                        <span className="text-primary flex-1 min-w-0 truncate">{pt.title}</span>
+                        <span className="text-gold">{pt.current}/{pt.target} ({pct}%)</span>
+                        {pt.resetType !== 'none' && <span className="text-muted italic">{pt.resetType}</span>}
+                        <button
+                          onClick={() => { if (window.confirm(`Remove "${pt.title}" from ${st.fullName}?`)) deletePersonalTasbih(st.id, pt.id); }}
+                          className="text-danger hover:text-red-400 transition-colors ml-1"
+                          title="Delete"
+                        >✕</button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           );
@@ -385,6 +430,76 @@ export default function StudentsTab({ groupId }) {
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Personal Tasbih admin modal */}
+      <Modal
+        open={!!ptModal}
+        onClose={() => setPtModal(null)}
+        title={`Personal Tasbihs — ${ptModal?.fullName}`}
+        footer={
+          <Button variant="ghost" size="sm" onClick={() => setPtModal(null)}>Close</Button>
+        }
+      >
+        {ptModal && (
+          <div>
+            {/* Existing list */}
+            {(students.find(s => s.id === ptModal.id)?.personalTasbihs || []).length > 0 ? (
+              <div className="mb-4 space-y-2">
+                {(students.find(s => s.id === ptModal.id)?.personalTasbihs || []).map(pt => {
+                  const pct = pt.target > 0 ? Math.min(100, Math.round((pt.current / pt.target) * 100)) : 0;
+                  return (
+                    <div key={pt.id} className="flex items-center gap-2 py-2 px-3 rounded-lg bg-bg-card2 border border-border">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-primary font-medium truncate">{pt.title}</p>
+                        <p className="text-xs text-muted">{pt.current}/{pt.target} ({pct}%) · Reset: {pt.resetType}</p>
+                      </div>
+                      <button
+                        onClick={() => { if (window.confirm(`Delete "${pt.title}"?`)) deletePersonalTasbih(ptModal.id, pt.id); }}
+                        className="text-xs text-danger hover:text-red-400 flex-shrink-0 transition-colors"
+                      >Delete</button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted mb-4">No personal tasbihs yet.</p>
+            )}
+
+            {/* Add new */}
+            <div className="border-t border-border pt-4">
+              <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-3">Add Tasbih</p>
+              {ptErr && <Alert type="error">{ptErr}</Alert>}
+              <Input
+                label="Title *"
+                value={ptForm.title}
+                onChange={e => { setPtForm(f => ({ ...f, title: e.target.value })); setPtErr(''); }}
+                placeholder="e.g. Subhanallah"
+              />
+              <Input
+                label="Target *"
+                type="number"
+                value={ptForm.target}
+                onChange={e => { setPtForm(f => ({ ...f, target: e.target.value })); setPtErr(''); }}
+                placeholder="e.g. 100"
+                min={1}
+              />
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Auto Reset</label>
+                <select
+                  value={ptForm.resetType}
+                  onChange={e => setPtForm(f => ({ ...f, resetType: e.target.value }))}
+                  className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold"
+                >
+                  <option value="none">None — never resets</option>
+                  <option value="daily">Daily — resets every midnight</option>
+                  <option value="weekly">Weekly — resets every Monday</option>
+                </select>
+              </div>
+              <Button size="sm" full onClick={savePt}>Add Tasbih</Button>
+            </div>
           </div>
         )}
       </Modal>

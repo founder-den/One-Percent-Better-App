@@ -107,10 +107,78 @@ function PersonalTemplateGoal({ template, student }) {
   );
 }
 
+// ─── Student-created personal tasbih card ────────────────────────
+function StudentTasbihCard({ pt, studentId }) {
+  const { updatePersonalTasbih, deletePersonalTasbih } = useApp();
+  const [celebration, setCelebration] = useState('');
+
+  const current = pt.current || 0;
+  const target  = pt.target  || 100;
+  const pct     = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  const isDone  = current >= target;
+
+  function tap(n) {
+    if (isDone) return;
+    const newCurrent = Math.min(current + n, target);
+    updatePersonalTasbih(studentId, pt.id, { current: newCurrent });
+    if (!isDone && newCurrent >= target) {
+      setCelebration('MashAllah! Goal reached!');
+      setTimeout(() => setCelebration(''), 4000);
+    }
+  }
+
+  function reset() {
+    updatePersonalTasbih(studentId, pt.id, { current: 0 });
+    setCelebration('');
+  }
+
+  const RESET_LABELS = { none: '', daily: 'Daily reset', weekly: 'Weekly reset' };
+
+  return (
+    <div className={`p-4 rounded-lg border ${isDone ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'} mt-3`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-primary">{pt.title}</p>
+          {pt.resetType && pt.resetType !== 'none' && (
+            <p className="text-xs text-muted">{RESET_LABELS[pt.resetType]}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isDone && <span className="text-xs text-gold font-bold">Done</span>}
+          <button
+            onClick={() => { if (window.confirm(`Delete "${pt.title}"?`)) deletePersonalTasbih(studentId, pt.id); }}
+            className="text-xs text-muted hover:text-danger transition-colors"
+            title="Delete"
+          >✕</button>
+        </div>
+      </div>
+      {celebration && (
+        <div className="text-center text-xs font-semibold text-gold py-1 px-2 rounded bg-[var(--gold-subtle)] mb-2">
+          {celebration}
+        </div>
+      )}
+      <ProgressBar value={current} max={target} className="mb-1" />
+      <p className="text-xs text-muted mb-2">{current.toLocaleString()} / {target.toLocaleString()} ({pct}%)</p>
+      <div className="flex gap-1.5 flex-wrap">
+        <Button size="xs" variant="outline" onClick={() => tap(1)}>+1</Button>
+        <Button size="xs" variant="outline" onClick={() => tap(10)}>+10</Button>
+        <Button size="xs" variant="outline" onClick={() => tap(50)}>+50</Button>
+        <Button size="xs" variant="outline" onClick={() => tap(100)}>+100</Button>
+        <Button size="xs" variant="ghost" onClick={reset}>Reset</Button>
+      </div>
+    </div>
+  );
+}
+
 export function PersonalTasbih() {
   const { student, refreshStudent } = useAuth();
-  const { saveTasbih, personalTasbihTemplates } = useApp();
+  const { saveTasbih, personalTasbihTemplates, addPersonalTasbih } = useApp();
   const today = todayString();
+
+  // State for add-tasbih form
+  const [showAddForm, setShowAddForm]   = useState(false);
+  const [addForm, setAddForm]           = useState({ title: '', target: '', resetType: 'none' });
+  const [addErr, setAddErr]             = useState('');
 
   function initTasbih() {
     const t = student.tasbih || {
@@ -147,12 +215,25 @@ export function PersonalTasbih() {
     setTasbih(t => ({ ...t, dailyResetEnabled: !t.dailyResetEnabled }));
   }
 
+  function handleAdd() {
+    setAddErr('');
+    if (!addForm.title.trim()) { setAddErr('Title is required.'); return; }
+    const target = parseInt(addForm.target);
+    if (isNaN(target) || target < 1) { setAddErr('Target must be a positive number.'); return; }
+    addPersonalTasbih(student.id, { title: addForm.title.trim(), target, resetType: addForm.resetType });
+    setAddForm({ title: '', target: '', resetType: 'none' });
+    setShowAddForm(false);
+    setAddErr('');
+  }
+
   // Filter templates visible to this student's group
   const visibleTemplates = personalTasbihTemplates.filter(t =>
     t.isActive &&
     (t.groupScope === 'all' ||
       (Array.isArray(t.groupScope) && t.groupScope.includes(student.groupId)))
   );
+
+  const myTasbihs = student.personalTasbihs || [];
 
   return (
     <div className="space-y-4">
@@ -202,6 +283,57 @@ export function PersonalTasbih() {
               ${tasbih.dailyResetEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
           </div>
         </label>
+      </Card>
+
+      {/* My Tasbihs — student-created personal counters */}
+      <Card>
+        <div className="flex items-center justify-between mb-1">
+          <SectionHeading>My Tasbihs</SectionHeading>
+          <Button size="xs" variant="ghost" onClick={() => { setShowAddForm(f => !f); setAddErr(''); }}>
+            {showAddForm ? 'Cancel' : '+ Add'}
+          </Button>
+        </div>
+
+        {showAddForm && (
+          <div className="mt-3 space-y-3 border-t border-border pt-3">
+            {addErr && <p className="text-xs text-danger">{addErr}</p>}
+            <Input
+              label="Title *"
+              value={addForm.title}
+              onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Say Subhanallah 100 times"
+            />
+            <Input
+              label="Target *"
+              type="number"
+              value={addForm.target}
+              onChange={e => setAddForm(f => ({ ...f, target: e.target.value }))}
+              placeholder="e.g. 100"
+              min={1}
+            />
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Auto Reset</label>
+              <select
+                value={addForm.resetType}
+                onChange={e => setAddForm(f => ({ ...f, resetType: e.target.value }))}
+                className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold"
+              >
+                <option value="none">None — never resets</option>
+                <option value="daily">Daily — resets every midnight</option>
+                <option value="weekly">Weekly — resets every Monday</option>
+              </select>
+            </div>
+            <Button size="sm" full onClick={handleAdd}>Add Tasbih</Button>
+          </div>
+        )}
+
+        {myTasbihs.length === 0 && !showAddForm && (
+          <p className="text-sm text-muted mt-2">No personal tasbihs yet. Tap + Add to create one.</p>
+        )}
+
+        {myTasbihs.map(pt => (
+          <StudentTasbihCard key={pt.id} pt={pt} studentId={student.id} />
+        ))}
       </Card>
 
       {visibleTemplates.length > 0 && (

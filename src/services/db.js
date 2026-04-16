@@ -25,6 +25,7 @@ function mapStudent(row, submissions = [], bonusPoints = [], books = [], program
     avatar:                 row.avatar ?? null,
     tasbih:                 row.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personalTasbihProgress: row.personal_tasbih_progress || {},
+    personalTasbihs:        row.personal_tasbihs || [],
     submissions,
     bonusPoints,
     books,
@@ -95,6 +96,8 @@ function mapGlobalTasbih(row) {
     completedTimes: row.completed_times,
     isActive:       row.is_active,
     groupScope:     row.group_scope || 'all',
+    resetType:      row.reset_type    || 'none',
+    lastResetDate:  row.last_reset_date || '',
   };
 }
 
@@ -106,6 +109,7 @@ function mapPersonalTemplate(row) {
     target:      row.target,
     groupScope:  row.group_scope || 'all',
     isActive:    row.is_active,
+    resetType:   row.reset_type  || 'none',
   };
 }
 
@@ -435,6 +439,7 @@ export async function dbRegisterStudent(student) {
     avatar:                   student.avatar || null,
     tasbih:                   student.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personal_tasbih_progress: student.personalTasbihProgress || {},
+    personal_tasbihs:         student.personalTasbihs        || [],
   });
 
   if (error) {
@@ -443,7 +448,7 @@ export async function dbRegisterStudent(student) {
   }
 
   console.log('[db] ✓ registerStudent — inserted into Supabase:', student.username);
-  return { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [] };
+  return { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [], personalTasbihs: student.personalTasbihs || [] };
 }
 
 export async function dbUpdateStudent(id, fields) {
@@ -563,10 +568,12 @@ export async function dbAddGlobalTasbih(t) {
     title:           t.title,
     description:     t.description  || '',
     target:          t.target,
-    current:         t.current      ?? 0,
-    completed_times: t.completedTimes ?? 0,
-    is_active:       t.isActive     ?? true,
-    group_scope:     t.groupScope   || 'all',
+    current:          t.current       ?? 0,
+    completed_times:  t.completedTimes ?? 0,
+    is_active:        t.isActive      ?? true,
+    group_scope:      t.groupScope    || 'all',
+    reset_type:       t.resetType     || 'none',
+    last_reset_date:  t.lastResetDate || '',
   });
   if (error) { console.error('[db] addGlobalTasbih — Supabase write FAILED:', error); return null; }
   return t;
@@ -579,9 +586,11 @@ export async function dbUpdateGlobalTasbih(id, fields) {
   if (fields.description    !== undefined) row.description     = fields.description;
   if (fields.target         !== undefined) row.target          = fields.target;
   if (fields.current        !== undefined) row.current         = fields.current;
-  if (fields.completedTimes !== undefined) row.completed_times = fields.completedTimes;
-  if (fields.isActive       !== undefined) row.is_active       = fields.isActive;
-  if (fields.groupScope     !== undefined) row.group_scope     = fields.groupScope;
+  if (fields.completedTimes !== undefined) row.completed_times  = fields.completedTimes;
+  if (fields.isActive       !== undefined) row.is_active        = fields.isActive;
+  if (fields.groupScope     !== undefined) row.group_scope      = fields.groupScope;
+  if (fields.resetType      !== undefined) row.reset_type       = fields.resetType;
+  if (fields.lastResetDate  !== undefined) row.last_reset_date  = fields.lastResetDate;
 
   const { error } = await supabase.from('global_tasbihs').update(row).eq('id', id);
   if (error) { console.error('[db] updateGlobalTasbih — Supabase write FAILED:', error); return false; }
@@ -598,6 +607,7 @@ export async function dbAddPersonalTemplate(t) {
     target:      t.target,
     group_scope: t.groupScope  || 'all',
     is_active:   t.isActive    ?? true,
+    reset_type:  t.resetType   || 'none',
   });
   if (error) { console.error('[db] addPersonalTemplate — Supabase write FAILED:', error); return null; }
   return t;
@@ -611,6 +621,7 @@ export async function dbUpdatePersonalTemplate(id, fields) {
   if (fields.target      !== undefined) row.target      = fields.target;
   if (fields.groupScope  !== undefined) row.group_scope = fields.groupScope;
   if (fields.isActive    !== undefined) row.is_active   = fields.isActive;
+  if (fields.resetType   !== undefined) row.reset_type  = fields.resetType;
 
   const { error } = await supabase.from('personal_tasbih_templates').update(row).eq('id', id);
   if (error) { console.error('[db] updatePersonalTemplate — Supabase write FAILED:', error); return false; }
@@ -630,6 +641,16 @@ export async function dbSavePersonalTplProgress(studentId, fullProgress) {
   const { error } = await supabase.from('students')
     .update({ personal_tasbih_progress: fullProgress }).eq('id', studentId);
   if (error) { console.error('[db] savePersonalTplProgress — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+// ─── STUDENT PERSONAL TASBIHS (student-created) ───────────────────
+// Saves the entire personal_tasbihs array for a student.
+export async function dbSavePersonalTasbihs(studentId, personalTasbihs) {
+  console.log('[db] savePersonalTasbihs:', studentId, personalTasbihs.length);
+  const { error } = await supabase.from('students')
+    .update({ personal_tasbihs: personalTasbihs }).eq('id', studentId);
+  if (error) { console.error('[db] savePersonalTasbihs — Supabase write FAILED:', error); return false; }
   return true;
 }
 

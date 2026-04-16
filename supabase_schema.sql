@@ -194,6 +194,23 @@ GRANT ALL ON program_completions         TO anon;
 GRANT ALL ON collective_task_counts      TO anon;
 
 
+-- ─── Column additions for tasbih reset types ────────────────────
+-- Run these if you created the tables before the reset-type feature
+-- was added. Safe to re-run (IF NOT EXISTS guards are handled by
+-- checking the information_schema, but ALTER TABLE ADD COLUMN is
+-- idempotent in Postgres 9.6+ with IF NOT EXISTS).
+
+ALTER TABLE students
+  ADD COLUMN IF NOT EXISTS personal_tasbihs jsonb DEFAULT '[]';
+
+ALTER TABLE global_tasbihs
+  ADD COLUMN IF NOT EXISTS reset_type       text DEFAULT 'none',
+  ADD COLUMN IF NOT EXISTS last_reset_date  text DEFAULT '';
+
+ALTER TABLE personal_tasbih_templates
+  ADD COLUMN IF NOT EXISTS reset_type text DEFAULT 'none';
+
+
 -- ─── Enable Realtime for live subscriptions ──────────────────────
 -- Run these in the Supabase Dashboard → Database → Replication,
 -- OR via SQL (requires superuser):

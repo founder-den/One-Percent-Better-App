@@ -5,6 +5,37 @@
 
 import { diffDays, todayString } from './data.js';
 
+// ─── Monday of the week containing dateStr (YYYY-MM-DD) ───────────
+function getMondayString(dateStr) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const day  = date.getDay(); // 0=Sun … 6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+// ─── Tasbih auto-reset check ──────────────────────────────────────
+// resetType: 'none' | 'daily' | 'weekly'
+// lastResetDate: YYYY-MM-DD string (may be '' or null for never reset)
+// Returns: { needsReset: boolean, newLastResetDate: string }
+export function checkAndResetTasbih(resetType, lastResetDate) {
+  const today = todayString();
+  if (!resetType || resetType === 'none') {
+    return { needsReset: false, newLastResetDate: lastResetDate || '' };
+  }
+  if (resetType === 'daily') {
+    return { needsReset: lastResetDate !== today, newLastResetDate: today };
+  }
+  if (resetType === 'weekly') {
+    const thisMonday = getMondayString(today);
+    const lastMonday = lastResetDate ? getMondayString(lastResetDate) : '';
+    return { needsReset: lastMonday !== thisMonday, newLastResetDate: today };
+  }
+  return { needsReset: false, newLastResetDate: lastResetDate || '' };
+}
+
 // ─── Points map ───────────────────────────────────────────────────
 function pointsMap(activities) {
   const map = {};

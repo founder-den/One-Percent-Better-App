@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { generateId, todayString, setSessionUsername } from '../services/data.js';
+import { checkAndResetTasbih } from '../services/calculations.js';
 import {
   loadAll,
   dbEnsureCommunity, dbLoadCommunity, dbLoadGroups,
@@ -20,6 +21,7 @@ import {
   dbAddProgram, dbUpdateProgram, dbDeleteProgram,
   dbSaveProgramCompletion,
   dbUpdateCollectiveTask,
+  dbSavePersonalTasbihs,
   subscribeToGlobalTasbihs,
   subscribeToStudents,
   subscribeToSubmissions,
@@ -73,10 +75,51 @@ export function AppProvider({ children }) {
       setAdminPassword(data.adminSettings.adminPassword);
       setRegModeState(data.adminSettings.registrationMode);
       setProgramsLabelState(data.adminSettings.programsLabel);
-      setStudents(data.students);
+      // ── Auto-reset global tasbihs ─────────────────────────────
+      const resetGlobals = data.globalTasbihs.map(t => {
+        const { needsReset, newLastResetDate } = checkAndResetTasbih(t.resetType, t.lastResetDate);
+        if (needsReset) {
+          dbUpdateGlobalTasbih(t.id, { current: 0, lastResetDate: newLastResetDate });
+          return { ...t, current: 0, lastResetDate: newLastResetDate };
+        }
+        return t;
+      });
+
+      // ── Auto-reset student personal tasbihs + template progress ──
+      const resetStudents = data.students.map(st => {
+        let changed = false;
+
+        // student.personalTasbihs (student-created)
+        const newPT = (st.personalTasbihs || []).map(pt => {
+          const { needsReset, newLastResetDate } = checkAndResetTasbih(pt.resetType, pt.lastResetDate);
+          if (needsReset) { changed = true; return { ...pt, current: 0, lastResetDate: newLastResetDate }; }
+          return pt;
+        });
+
+        // personalTasbihProgress (admin template progress)
+        const newProg = { ...(st.personalTasbihProgress || {}) };
+        data.personalTasbihTemplates.forEach(tpl => {
+          if (!tpl.resetType || tpl.resetType === 'none') return;
+          const prog = newProg[tpl.id] || { count: 0, lastResetDate: '' };
+          const { needsReset, newLastResetDate } = checkAndResetTasbih(tpl.resetType, prog.lastResetDate);
+          if (needsReset) {
+            changed = true;
+            newProg[tpl.id] = { count: 0, lastResetDate: newLastResetDate };
+          }
+        });
+
+        if (changed) {
+          dbSavePersonalTasbihs(st.id, newPT);
+          dbSavePersonalTplProgress(st.id, newProg);
+          return { ...st, personalTasbihs: newPT, personalTasbihProgress: newProg };
+        }
+        return { ...st, personalTasbihs: newPT };
+      });
+
+      setStudents(resetStudents);
       setActivities(data.activities);
       setPeriods(data.periods);
-      setGlobalTasbihs(data.globalTasbihs);
+      setGlobalTasbihs(resetGlobals);
       setPersonalTemplates(data.personalTasbihTemplates);
       setPrograms(data.programs);
       setCollectiveCounts(data.collectiveTaskCounts);
@@ -288,6 +331,56 @@ export function AppProvider({ children }) {
     if (!ok) { console.error('[AppContext] saveTasbih failed — state NOT updated'); return student; }
     setStudents(s => s.map(st => st.id === student.id ? { ...st, tasbih } : st));
     return { ...student, tasbih };
+  }, []);
+
+  // ── Student personal tasbihs ──────────────────────────────────
+  const addPersonalTasbih = useCallback(async (studentId, fields) => {
+    console.log('[AppContext] addPersonalTasbih:', { studentId, title: fields.title });
+    const newT = {
+      id:            generateId(),
+      title:         fields.title       || 'Tasbih',
+      target:        Number(fields.target) || 100,
+      current:       0,
+      resetType:     fields.resetType   || 'none',
+      lastResetDate: '',
+    };
+    let updated = null;
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      updated = { ...st, personalTasbihs: [...(st.personalTasbihs || []), newT] };
+      return updated;
+    }));
+    // Fire-and-forget — capture array after state update via closure
+    setTimeout(() => {
+      setStudents(s => {
+        const st = s.find(x => x.id === studentId);
+        if (st) dbSavePersonalTasbihs(studentId, st.personalTasbihs || []);
+        return s;
+      });
+    }, 0);
+    return newT;
+  }, []);
+
+  const updatePersonalTasbih = useCallback(async (studentId, tasbihId, fields) => {
+    console.log('[AppContext] updatePersonalTasbih:', { studentId, tasbihId });
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      const newList = (st.personalTasbihs || []).map(t =>
+        t.id === tasbihId ? { ...t, ...fields } : t
+      );
+      dbSavePersonalTasbihs(studentId, newList);
+      return { ...st, personalTasbihs: newList };
+    }));
+  }, []);
+
+  const deletePersonalTasbih = useCallback(async (studentId, tasbihId) => {
+    console.log('[AppContext] deletePersonalTasbih:', { studentId, tasbihId });
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      const newList = (st.personalTasbihs || []).filter(t => t.id !== tasbihId);
+      dbSavePersonalTasbihs(studentId, newList);
+      return { ...st, personalTasbihs: newList };
+    }));
   }, []);
 
   // ── Activities ────────────────────────────────────────────────
@@ -598,6 +691,8 @@ export function AppProvider({ children }) {
       // Personal Tasbih Templates
       addPersonalTasbihTemplate, updatePersonalTasbihTemplate, deletePersonalTasbihTemplate,
       getPersonalTplProgress, savePersonalTplProgress,
+      // Student personal tasbihs
+      addPersonalTasbih, updatePersonalTasbih, deletePersonalTasbih,
       // Reading Books
       getStudentBooks, addBook, updateBook, removeBook,
       // Programs

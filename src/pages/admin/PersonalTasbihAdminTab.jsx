@@ -4,7 +4,7 @@ import {
   Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge,
 } from '../../components/ui.jsx';
 
-const BLANK_FORM = { title: '', description: '', target: '', groupScope: 'all' };
+const BLANK_FORM = { title: '', description: '', target: '', groupScope: 'all', resetType: 'none' };
 
 export default function PersonalTasbihAdminTab() {
   const {
@@ -37,6 +37,7 @@ export default function PersonalTasbihAdminTab() {
       title:       t.title,
       description: t.description || '',
       target:      String(t.target),
+      resetType:   t.resetType   || 'none',
     });
     setScopeMode(isAll ? 'all' : 'specific');
     setSelGroups(isAll ? [] : (Array.isArray(t.groupScope) ? t.groupScope : []));
@@ -61,6 +62,7 @@ export default function PersonalTasbihAdminTab() {
         description: form.description.trim(),
         target,
         groupScope,
+        resetType:   form.resetType,
       });
     } else {
       addPersonalTasbihTemplate({
@@ -68,6 +70,7 @@ export default function PersonalTasbihAdminTab() {
         description: form.description.trim(),
         target,
         groupScope,
+        resetType:   form.resetType,
       });
     }
     setShowForm(false);
@@ -116,7 +119,12 @@ export default function PersonalTasbihAdminTab() {
                 <Badge variant="gold">Active</Badge>
               </div>
               {t.description && <p className="text-xs text-muted whitespace-pre-wrap">{t.description}</p>}
-              <p className="text-xs text-muted mt-1">Target: {t.target.toLocaleString()} · Scope: {scopeLabel(t)}</p>
+              <p className="text-xs text-muted mt-1">
+                Target: {t.target.toLocaleString()} · Scope: {scopeLabel(t)}
+                {t.resetType && t.resetType !== 'none' && (
+                  <span className="ml-2 text-gold">· Resets {t.resetType}</span>
+                )}
+              </p>
             </div>
             <div className="flex flex-col gap-1 items-end flex-shrink-0">
               <Button size="xs" variant="ghost"  onClick={() => openEdit(t)}>Edit</Button>
@@ -181,6 +189,19 @@ export default function PersonalTasbihAdminTab() {
           placeholder="e.g. 200"
           min={1}
         />
+
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Auto Reset</label>
+          <select
+            value={form.resetType}
+            onChange={e => setForm(f => ({ ...f, resetType: e.target.value }))}
+            className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold"
+          >
+            <option value="none">None — never resets</option>
+            <option value="daily">Daily — resets every midnight</option>
+            <option value="weekly">Weekly — resets every Monday</option>
+          </select>
+        </div>
 
         <div className="mb-4">
           <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Visible To</label>
