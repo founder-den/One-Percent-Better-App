@@ -8,9 +8,9 @@ import ToolsPage        from './pages/tools/ToolsPage.jsx';
 
 export default function App() {
   return (
-    <>
+    <div className="app-layout">
       <Navbar />
-      <main>
+      <main className="app-main">
         <Routes>
           <Route path="/"            element={<Home />} />
           <Route path="/student"     element={<StudentPortal />} />
@@ -21,6 +21,6 @@ export default function App() {
           <Route path="*"            element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-    </>
+    </div>
   );
 }
