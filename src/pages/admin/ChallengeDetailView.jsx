@@ -332,6 +332,16 @@ function ChallengeMembersTab({ challenge, students, memberships, onReload }) {
 }
 
 // ─── Data sub-tab ─────────────────────────────────────────────────────
+// Returns true if a submission belongs to this challenge:
+// must fall in the date range AND contain at least one challenge activity ID.
+function isValidChallengeSub(sub, challenge, actIds) {
+  if (!sub.date) return false;
+  if (challenge.startDate && sub.date < challenge.startDate) return false;
+  if (challenge.endDate   && sub.date > challenge.endDate)   return false;
+  const ids = sub.completedActivities || [];
+  return ids.some(ca => actIds.has(typeof ca === 'string' ? ca : ca?.id));
+}
+
 function ChallengeDataTab({ challenge, students, memberships }) {
   const memberIds = memberships
     .filter(m => m.challengeId === challenge.id)
@@ -339,16 +349,12 @@ function ChallengeDataTab({ challenge, students, memberships }) {
 
   const memberStudents = students.filter(s => memberIds.includes(s.id));
   const activities     = challenge.activities || [];
+  const actIds         = new Set(activities.map(a => a.id));
 
-  // All submissions from members within the challenge date range
+  // Only valid challenge submissions: member + date range + has ≥1 challenge activity
   const allSubs = memberStudents.flatMap(s =>
     (s.submissions || [])
-      .filter(sub => {
-        if (!sub.date) return false;
-        if (challenge.startDate && sub.date < challenge.startDate) return false;
-        if (challenge.endDate   && sub.date > challenge.endDate)   return false;
-        return true;
-      })
+      .filter(sub => isValidChallengeSub(sub, challenge, actIds))
       .map(sub => ({ ...sub, studentId: s.id }))
   );
 
@@ -369,19 +375,16 @@ function ChallengeDataTab({ challenge, students, memberships }) {
     return { ...act, count, pct };
   });
 
-  // Section 3 — top 3 leaderboard
+  // Section 3 — top 3 leaderboard (uses same valid-submission filter)
   const leaderboard = memberStudents
     .map(s => {
-      const pts = (s.submissions || []).reduce((sum, sub) => {
-        if (!sub.date) return sum;
-        if (challenge.startDate && sub.date < challenge.startDate) return sum;
-        if (challenge.endDate   && sub.date > challenge.endDate)   return sum;
-        return sum + (sub.completedActivities || []).reduce((aSum, ca) => {
+      const pts = (s.submissions || [])
+        .filter(sub => isValidChallengeSub(sub, challenge, actIds))
+        .reduce((sum, sub) => sum + (sub.completedActivities || []).reduce((aSum, ca) => {
           const actId = typeof ca === 'string' ? ca : ca?.id;
           const act   = activities.find(a => a.id === actId);
           return aSum + (act ? act.points : 0);
-        }, 0);
-      }, 0);
+        }, 0), 0);
       return { ...s, pts };
     })
     .sort((a, b) => b.pts - a.pts)
@@ -458,11 +461,166 @@ function ChallengeDataTab({ challenge, students, memberships }) {
 }
 
 // ─── Detail view root ─────────────────────────────────────────────────
+// ─── Submissions sub-tab ──────────────────────────────────────────
+function ChallengeSubmissionsTab({ challenge, students, memberships }) {
+  const memberIds = memberships
+    .filter(m => m.challengeId === challenge.id)
+    .map(m => m.studentId);
+  const memberStudents = students.filter(s => memberIds.includes(s.id));
+  const activities     = challenge.activities || [];
+  const actIds         = new Set(activities.map(a => a.id));
+
+  const [filterStudent, setFilterStudent] = useState('');
+  const [filterStart,   setFilterStart]   = useState('');
+  const [filterEnd,     setFilterEnd]     = useState('');
+
+  // All valid challenge submissions across all members, newest first
+  const allSubs = memberStudents
+    .flatMap(s =>
+      (s.submissions || [])
+        .filter(sub => isValidChallengeSub(sub, challenge, actIds))
+        .map(sub => {
+          const pts = (sub.completedActivities || []).reduce((sum, ca) => {
+            const actId = typeof ca === 'string' ? ca : ca?.id;
+            const act   = activities.find(a => a.id === actId);
+            return sum + (act ? act.points : 0);
+          }, 0);
+          return {
+            ...sub,
+            studentId:   s.id,
+            studentName: s.fullName || s.username,
+            pts,
+          };
+        })
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  // Apply filters
+  const filtered = allSubs.filter(sub => {
+    if (filterStudent && sub.studentId !== filterStudent) return false;
+    if (filterStart   && sub.date < filterStart)           return false;
+    if (filterEnd     && sub.date > filterEnd)             return false;
+    return true;
+  });
+
+  const totalPts = filtered.reduce((sum, s) => sum + s.pts, 0);
+  const hasFilters = filterStudent || filterStart || filterEnd;
+
+  return (
+    <div className="space-y-4 mt-2">
+      {/* Filter bar */}
+      <Card>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-36">
+            <label className="block text-xs font-medium text-muted mb-1">Student</label>
+            <select
+              value={filterStudent}
+              onChange={e => setFilterStudent(e.target.value)}
+              className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            >
+              <option value="">All Students</option>
+              {memberStudents.map(s => (
+                <option key={s.id} value={s.id}>{s.fullName || s.username}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 min-w-28">
+            <label className="block text-xs font-medium text-muted mb-1">From</label>
+            <input
+              type="date"
+              value={filterStart}
+              onChange={e => setFilterStart(e.target.value)}
+              className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            />
+          </div>
+          <div className="flex-1 min-w-28">
+            <label className="block text-xs font-medium text-muted mb-1">To</label>
+            <input
+              type="date"
+              value={filterEnd}
+              onChange={e => setFilterEnd(e.target.value)}
+              className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            />
+          </div>
+          {hasFilters && (
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => { setFilterStudent(''); setFilterStart(''); setFilterEnd(''); }}
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      {/* Submission list */}
+      <Card>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon="📋"
+            title="No submissions"
+            text={allSubs.length > 0
+              ? 'No submissions match the current filters.'
+              : 'No valid challenge submissions yet.'}
+          />
+        ) : (
+          <div className="space-y-2">
+            {filtered.map((sub, i) => (
+              <div
+                key={`${sub.studentId}-${sub.date}-${i}`}
+                className="flex items-start gap-3 py-3 px-4 rounded-lg border border-border bg-bg-card2"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <span className="text-sm font-medium text-primary">{sub.studentName}</span>
+                    <span className="text-xs text-muted">{formatDate(sub.date)}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(sub.completedActivities || []).map(ca => {
+                      const actId = typeof ca === 'string' ? ca : ca?.id;
+                      const act   = activities.find(a => a.id === actId);
+                      if (!act) return null;
+                      return (
+                        <span
+                          key={actId}
+                          className="text-xs px-2 py-0.5 rounded-full bg-[var(--gold-subtle)] text-gold border border-gold-d"
+                        >
+                          {act.name}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-gold flex-shrink-0 mt-0.5">+{sub.pts}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Summary */}
+      {filtered.length > 0 && (
+        <div className="flex gap-5 px-1 text-sm text-muted">
+          <span>
+            <span className="font-semibold text-primary">{filtered.length}</span>
+            {' '}submission{filtered.length !== 1 ? 's' : ''}
+          </span>
+          <span>
+            <span className="font-semibold text-gold">{totalPts}</span>
+            {' '}total pts
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DETAIL_TABS = [
-  { key: 'activities', label: 'Activities' },
-  { key: 'periods',    label: 'Periods' },
-  { key: 'members',    label: 'Members' },
-  { key: 'data',       label: 'Data' },
+  { key: 'activities',  label: 'Activities' },
+  { key: 'periods',     label: 'Periods' },
+  { key: 'members',     label: 'Members' },
+  { key: 'data',        label: 'Data' },
+  { key: 'submissions', label: 'Submissions' },
 ];
 
 export default function ChallengeDetailView({ challengeId, onBack }) {
@@ -528,6 +686,13 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
       )}
       {activeTab === 'data' && (
         <ChallengeDataTab
+          challenge={challenge}
+          students={students}
+          memberships={challengeMemberships}
+        />
+      )}
+      {activeTab === 'submissions' && (
+        <ChallengeSubmissionsTab
           challenge={challenge}
           students={students}
           memberships={challengeMemberships}

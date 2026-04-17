@@ -92,20 +92,32 @@ export default function HistoryTab({ challenge }) {
   }, [selOption]);
 
   // Build lookup: date → completedActivities set
+  // In challenge mode, skip submissions that contain no challenge activity IDs
+  // (these are old group-level submissions that don't belong to this challenge).
   const subMap = useMemo(() => {
     const m = {};
+    const challengeActIds = isChallenge
+      ? new Set((challenge.activities || []).map(a => a.id))
+      : null;
     (student.submissions || []).forEach(s => {
+      if (challengeActIds) {
+        const ids = s.completedActivities || [];
+        const valid = ids.some(ca => challengeActIds.has(typeof ca === 'string' ? ca : ca?.id));
+        if (!valid) return;
+      }
       m[s.date] = new Set(s.completedActivities || []);
     });
     return m;
-  }, [student]);
+  }, [student, isChallenge, challenge]);
 
   // Summary stats
   const totalPts  = getStudentTotalPoints(student, allActivities);
   const periodPts = period
     ? getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate)
     : null;
-  const totalDays = getStudentActiveDays(student);
+  // In challenge mode derive active days from the filtered subMap so old
+  // group submissions don't inflate the count.
+  const totalDays = isChallenge ? Object.keys(subMap).length : getStudentActiveDays(student);
 
   const hasAnySubmission = Object.keys(subMap).length > 0;
 
