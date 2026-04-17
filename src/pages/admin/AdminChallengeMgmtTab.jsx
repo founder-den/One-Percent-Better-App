@@ -3,6 +3,7 @@ import { useApp }  from '../../context/AppContext.jsx';
 import {
   Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, confirm,
 } from '../../components/ui.jsx';
+import ChallengeDetailView from './ChallengeDetailView.jsx';
 
 // ─── Activity row editor (challenge-specific activities) ──────────
 function ActivityRow({ act, onChange, onDelete }) {
@@ -208,6 +209,7 @@ export default function AdminChallengeMgmtTab() {
   const [creating,     setCreating]     = useState(false);
   const [editing,      setEditing]      = useState(null); // challenge object
   const [viewMembers,  setViewMembers]  = useState(null); // challenge object
+  const [detailId,     setDetailId]     = useState(null); // challenge id for detail view
   const [saving,       setSaving]       = useState(false);
   const [saveErr,      setSaveErr]      = useState('');
 
@@ -233,6 +235,16 @@ export default function AdminChallengeMgmtTab() {
 
   async function handleToggleActive(c) {
     await updateChallenge(c.id, { isActive: !c.isActive });
+  }
+
+  // ── Detail view ──
+  if (detailId) {
+    return (
+      <ChallengeDetailView
+        challengeId={detailId}
+        onBack={() => setDetailId(null)}
+      />
+    );
   }
 
   // ── Create form ──
@@ -286,7 +298,10 @@ export default function AdminChallengeMgmtTab() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-primary text-sm">{c.name}</p>
+                      <button
+                        onClick={() => setDetailId(c.id)}
+                        className="font-medium text-primary text-sm hover:text-gold transition-colors text-left"
+                      >{c.name}</button>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.isActive ? 'bg-green-500/15 text-green-400' : 'bg-border text-muted'}`}>
                         {c.isActive ? 'Active' : 'Ended'}
                       </span>
@@ -304,6 +319,12 @@ export default function AdminChallengeMgmtTab() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setDetailId(c.id)}
+                      className="text-xs text-gold font-medium hover:opacity-70 transition-opacity"
+                    >
+                      Manage
+                    </button>
                     <button
                       onClick={() => setViewMembers(c)}
                       className="text-xs text-muted hover:text-primary transition-colors"

@@ -259,3 +259,25 @@ GRANT ALL ON challenges            TO anon;
 GRANT ALL ON challenge_memberships TO anon;
 
 NOTIFY pgrst, 'reload schema';
+
+
+-- ─── Challenge periods column ─────────────────────────────────────────
+-- Run this in Supabase SQL Editor to add per-challenge periods support:
+--
+-- ALTER TABLE challenges ADD COLUMN IF NOT EXISTS periods jsonb DEFAULT '[]';
+
+
+-- ─── Migrate existing students → Ramadan Challenge ────────────────────
+-- Run this in Supabase SQL Editor to add all existing students as members
+-- of the Ramadan Challenge automatically:
+--
+-- INSERT INTO challenge_memberships (id, challenge_id, student_id, joined_at)
+-- SELECT
+--   'mem_' || students.id,
+--   challenges.id,
+--   students.id,
+--   now()
+-- FROM students
+-- CROSS JOIN challenges
+-- WHERE challenges.name = 'Ramadan Challenge'
+-- ON CONFLICT DO NOTHING;
