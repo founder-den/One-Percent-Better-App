@@ -35,14 +35,28 @@ function lastNDays(n) {
   return dates;
 }
 
-export default function HistoryTab() {
+// Props:
+//   challenge — optional challenge object (enriched, with .periods array)
+//               When provided, activities and periods come from the challenge.
+export default function HistoryTab({ challenge }) {
   const { student } = useAuth();
   const { activitiesForGroup, activePeriod, periodsForGroup } = useApp();
 
-  const allActivities = activitiesForGroup(student.groupId);
-  const activities    = allActivities.filter(a => a.isActive ?? a.active ?? true);
-  const period        = activePeriod(student.groupId);
-  const allPeriods    = periodsForGroup(student.groupId);
+  const isChallenge = !!challenge;
+
+  const allActivities = isChallenge
+    ? (challenge.activities || [])
+    : activitiesForGroup(student.groupId);
+  const activities = isChallenge
+    ? allActivities.filter(a => a.isActive ?? true)
+    : allActivities.filter(a => a.isActive ?? a.active ?? true);
+
+  const period     = isChallenge
+    ? ((challenge.periods || []).find(p => p.isActive) || null)
+    : activePeriod(student.groupId);
+  const allPeriods = isChallenge
+    ? (challenge.periods || [])
+    : periodsForGroup(student.groupId);
 
   // Period selector options
   const periodOptions = useMemo(() => {
@@ -54,9 +68,17 @@ export default function HistoryTab() {
       .filter(p => !p.isActive)
       .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))
       .forEach(p => opts.push({ value: `period_${p.id}`, label: p.name, periodObj: p }));
+    // In challenge mode with no periods, offer the full challenge date range instead
+    if (isChallenge && !allPeriods.length && challenge.startDate && challenge.endDate) {
+      opts.push({
+        value: 'challenge_range',
+        label: 'Challenge Period',
+        periodObj: { startDate: challenge.startDate, endDate: challenge.endDate },
+      });
+    }
     opts.push({ value: 'last14', label: 'Last 14 Days', periodObj: null });
     return opts;
-  }, [period, allPeriods]);
+  }, [period, allPeriods, isChallenge, challenge]);
 
   const [selValue, setSelValue] = useState(() => periodOptions[0]?.value || 'last14');
 

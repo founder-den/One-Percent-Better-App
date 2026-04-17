@@ -95,7 +95,7 @@ function ChallengeDetail({ challenge, onBack }) {
       {activeTab === 'leaderboard' && (
         <LeaderboardInner challenge={enriched} memberStudents={memberStudents} />
       )}
-      {activeTab === 'history' && <HistoryTab />}
+      {activeTab === 'history' && <HistoryTab challenge={enriched} />}
     </div>
   );
 }
