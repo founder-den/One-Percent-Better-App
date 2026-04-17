@@ -38,7 +38,14 @@ function getWeekDays() {
   });
 }
 
-export default function DashboardTab() {
+// ─────────────────────────────────────────────────────────────────
+// Props:
+//   challenge      — optional challenge object (enriched, with .periods array)
+//   memberStudents — optional array of student objects (challenge members)
+// When both are provided the component operates in "challenge mode":
+//   activities, period, and student pool all come from the challenge.
+// ─────────────────────────────────────────────────────────────────
+export default function DashboardTab({ challenge, memberStudents }) {
   const { student, refreshStudent } = useAuth();
   const { activitiesForGroup, activePeriod, studentsForGroup, submitDay } = useApp();
 
@@ -47,11 +54,28 @@ export default function DashboardTab() {
   const [quote,   setQuote]   = useState('');
   const [err,     setErr]     = useState('');
 
-  const dateStr       = dayMode === 'today' ? todayString() : yesterdayString();
-  const allActivities = activitiesForGroup(student.groupId);
-  const activities    = allActivities.filter(a => a.isActive ?? a.active ?? true);
-  const period        = activePeriod(student.groupId);
-  const groupStudents = studentsForGroup(student.groupId);
+  const isChallenge = !!challenge;
+  const dateStr     = dayMode === 'today' ? todayString() : yesterdayString();
+
+  // ── Activities ──────────────────────────────────────────────────
+  // allActivities used for point calculations; activities used for the form
+  const allActivities = isChallenge
+    ? (challenge.activities || [])
+    : activitiesForGroup(student.groupId);
+
+  const activities = isChallenge
+    ? allActivities.filter(a => a.isActive ?? true)
+    : allActivities.filter(a => a.isActive ?? a.active ?? true);
+
+  // ── Period ──────────────────────────────────────────────────────
+  const period = isChallenge
+    ? ((challenge.periods || []).find(p => p.isActive) || null)
+    : activePeriod(student.groupId);
+
+  // ── Student pool (for rank) ─────────────────────────────────────
+  const groupStudents = isChallenge
+    ? (memberStudents || [])
+    : studentsForGroup(student.groupId);
 
   const existingSub = useMemo(
     () => (student.submissions || []).find(s => s.date === dateStr),
@@ -59,18 +83,26 @@ export default function DashboardTab() {
   );
   const alreadySubmitted = !!existingSub;
 
-  // ── Stats ──────────────────────────────────────────────────────────
-  const totalPts  = getStudentTotalPoints(student, allActivities);
+  // ── Stats ──────────────────────────────────────────────────────
+  // In challenge mode: total = points within challenge date range using challenge activities
+  const totalPts = isChallenge
+    ? (challenge.startDate && challenge.endDate
+        ? getStudentPeriodPoints(student, allActivities, challenge.startDate, challenge.endDate)
+        : getStudentTotalPoints(student, allActivities))
+    : getStudentTotalPoints(student, allActivities);
+
   const periodPts = period
     ? getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate)
     : null;
+
   const streak = getStudentStreak(student);
+
   const lb = period
     ? buildLeaderboard(groupStudents, allActivities, 'period', { periodStart: period.startDate, periodEnd: period.endDate })
     : buildLeaderboard(groupStudents, allActivities, 'total');
   const myRank = lb.find(r => r.id === student.id)?.rank ?? '—';
 
-  // ── Weekly chart ───────────────────────────────────────────────────
+  // ── Weekly chart ───────────────────────────────────────────────
   const weekDays = useMemo(() => {
     const days  = getWeekDays();
     const dates = days.map(d => d.dateStr);
@@ -98,11 +130,14 @@ export default function DashboardTab() {
 
   const checkedCount = activities.filter(a => checked[a.id]).length;
 
+  // Label for first stat card
+  const totalLabel = isChallenge ? 'Challenge Pts' : 'Total Points';
+
   return (
     <div className="mt-6 space-y-5">
-      {/* ── Stat cards (Step 5) ─────────────────────────────────────── */}
+      {/* ── Stat cards ───────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Total Points" value={totalPts} />
+        <StatCard label={totalLabel} value={totalPts} />
         {period
           ? <StatCard label="Period Points" value={periodPts} />
           : <StatCard label="Active Days" value={(student.submissions || []).length} />
@@ -111,7 +146,7 @@ export default function DashboardTab() {
         <StatCard label="Streak 🔥" value={streak} />
       </div>
 
-      {/* ── Period info + countdown (Step 6) ────────────────────────── */}
+      {/* ── Period info + countdown ───────────────────────────────── */}
       {period && (
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
           <span>
@@ -122,7 +157,7 @@ export default function DashboardTab() {
         </div>
       )}
 
-      {/* ── Weekly chart (Step 3) ────────────────────────────────────── */}
+      {/* ── Weekly chart ─────────────────────────────────────────── */}
       <Card className="!pb-4">
         <SectionHeading>This Week</SectionHeading>
         <WeeklyChart days={weekDays} />
@@ -149,7 +184,7 @@ export default function DashboardTab() {
         </div>
       </Card>
 
-      {/* ── Submission form (Step 3) ─────────────────────────────────── */}
+      {/* ── Submission form ──────────────────────────────────────── */}
       <Card>
         <div className="flex items-center justify-between mb-4">
           <SectionHeading className="!mb-0 flex-1">{formatDate(dateStr)}</SectionHeading>
@@ -190,7 +225,9 @@ export default function DashboardTab() {
         ) : (
           <div>
             {activities.length === 0 && (
-              <EmptyState icon="📋" title="No activities" text="Ask your admin to add activities to your group." />
+              isChallenge
+                ? <EmptyState icon="📋" title="No activities yet" text="This challenge has no activities set up yet." />
+                : <EmptyState icon="📋" title="No activities" text="Ask your admin to add activities to your group." />
             )}
             {activities.map(a => (
               <ChecklistItem

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
+import { supabase } from '../../services/supabase.js';
 import { Tabs } from '../../components/ui.jsx';
 import DashboardTab     from '../student/DashboardTab.jsx';
 import HistoryTab       from '../student/HistoryTab.jsx';
@@ -43,7 +44,37 @@ function PendingAccount() {
 
 // ─── Inside a single challenge ────────────────────────────────────
 function ChallengeDetail({ challenge, onBack }) {
-  const [activeTab, setActiveTab] = useState('submissions');
+  const { challengeMemberships, students } = useApp();
+  const [activeTab,       setActiveTab]       = useState('submissions');
+  // enriched = challenge merged with periods fetched fresh from Supabase
+  const [enriched, setEnriched] = useState(challenge);
+
+  // Fetch the periods column (not in AppContext/mapChallenge) whenever the challenge changes
+  useEffect(() => {
+    let cancelled = false;
+    supabase
+      .from('challenges')
+      .select('periods')
+      .eq('id', challenge.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) {
+          setEnriched({ ...challenge, periods: data?.periods || [] });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [challenge.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep non-periods fields in sync if context challenge updates (e.g. activities saved)
+  useEffect(() => {
+    setEnriched(prev => ({ ...challenge, periods: prev.periods || [] }));
+  }, [challenge]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Challenge members as full student objects (with submissions)
+  const memberIds = challengeMemberships
+    .filter(m => m.challengeId === challenge.id)
+    .map(m => m.studentId);
+  const memberStudents = students.filter(s => memberIds.includes(s.id));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
@@ -55,12 +86,16 @@ function ChallengeDetail({ challenge, onBack }) {
         Back to Challenges
       </button>
 
-      <h1 className="font-serif text-2xl text-primary mb-5">{challenge.name}</h1>
+      <h1 className="font-serif text-2xl text-primary mb-5">{enriched.name}</h1>
 
       <Tabs tabs={INNER_TABS} active={activeTab} onChange={setActiveTab} />
-      {activeTab === 'submissions' && <DashboardTab />}
-      {activeTab === 'leaderboard' && <LeaderboardInner />}
-      {activeTab === 'history'     && <HistoryTab />}
+      {activeTab === 'submissions' && (
+        <DashboardTab challenge={enriched} memberStudents={memberStudents} />
+      )}
+      {activeTab === 'leaderboard' && (
+        <LeaderboardInner challenge={enriched} memberStudents={memberStudents} />
+      )}
+      {activeTab === 'history' && <HistoryTab />}
     </div>
   );
 }
@@ -201,8 +236,19 @@ export default function ChallengePage() {
   if (!student)                              return <NotLoggedIn />;
   if ((student.status || 'active') === 'pending') return <PendingAccount />;
 
-  if (selected) {
-    return <ChallengeDetail challenge={selected} onBack={() => setSelected(null)} />;
+  // Keep selected challenge in sync with context (e.g. activities updated by admin)
+  const liveChallenge = selected
+    ? (challenges.find(c => c.id === selected.id) || selected)
+    : null;
+
+  if (liveChallenge) {
+    return (
+      <ChallengeDetail
+        key={liveChallenge.id}
+        challenge={liveChallenge}
+        onBack={() => setSelected(null)}
+      />
+    );
   }
 
   return (
