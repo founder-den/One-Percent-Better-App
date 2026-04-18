@@ -262,9 +262,12 @@ NOTIFY pgrst, 'reload schema';
 
 
 -- ─── Challenge periods column ─────────────────────────────────────────
--- Run this in Supabase SQL Editor to add per-challenge periods support:
---
--- ALTER TABLE challenges ADD COLUMN IF NOT EXISTS periods jsonb DEFAULT '[]';
+-- Run in Supabase SQL Editor to add per-challenge periods support:
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS periods jsonb DEFAULT '[]';
+
+-- ─── Submission score override ────────────────────────────────────────
+-- Run in Supabase SQL Editor to allow admin score overrides on submissions:
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS score_override numeric DEFAULT NULL;
 
 
 -- ─── Migrate existing students → Ramadan Challenge ────────────────────

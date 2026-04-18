@@ -44,6 +44,7 @@ function pointsMap(activities) {
 }
 
 function subPoints(sub, map) {
+  if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
   return (sub.completedActivities || []).reduce((sum, id) => sum + (map[id] || 0), 0);
 }
 
@@ -176,6 +177,7 @@ export function getTodayQuotesForGroup(students) {
 
 // ─── Points for a single submission ──────────────────────────────
 export function submissionPoints(sub, activities) {
+  if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
   const map = pointsMap(activities);
   return subPoints(sub, map);
 }

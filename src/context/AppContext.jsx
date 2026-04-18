@@ -10,7 +10,7 @@ import {
   dbAddActivity, dbAddActivities, dbUpdateActivity,
   dbAddPeriod, dbUpdatePeriod, dbDeletePeriod, dbActivatePeriod,
   dbRegisterStudent, dbUpdateStudent, dbDeleteStudent,
-  dbSubmitDay, dbEditSubmission,
+  dbSubmitDay, dbEditSubmission, dbDeleteSubmission,
   dbToggleQuoteLike,
   dbAddBonusPoints,
   dbUpdateTasbih,
@@ -286,20 +286,34 @@ export function AppProvider({ children }) {
     return students.find(st => st.id === studentId) || null;
   }, [students]);
 
-  const editSubmission = useCallback(async (studentId, dateStr, completedActivities) => {
+  const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });
-    const ok = await dbEditSubmission(studentId, dateStr, completedActivities);
+    const ok = await dbEditSubmission(studentId, dateStr, completedActivities, scoreOverride);
     if (!ok) { console.error('[AppContext] editSubmission failed — state NOT updated'); return; }
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
-      const subs = (st.submissions || []).map(sub =>
-        sub.date === dateStr ? { ...sub, completedActivities } : sub
-      );
+      const subs = (st.submissions || []).map(sub => {
+        if (sub.date !== dateStr) return sub;
+        const updated = { ...sub, completedActivities };
+        if (typeof scoreOverride === 'number') updated.scoreOverride = scoreOverride;
+        else delete updated.scoreOverride;
+        return updated;
+      });
       const exists = subs.some(sub => sub.date === dateStr);
       return {
         ...st,
         submissions: exists ? subs : [...subs, { date: dateStr, completedActivities, quote: '', quoteLikes: [] }],
       };
+    }));
+  }, []);
+
+  const deleteSubmission = useCallback(async (studentId, dateStr) => {
+    console.log('[AppContext] deleteSubmission:', { studentId, dateStr });
+    const ok = await dbDeleteSubmission(studentId, dateStr);
+    if (!ok) { console.error('[AppContext] deleteSubmission failed — state NOT updated'); return; }
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      return { ...st, submissions: (st.submissions || []).filter(sub => sub.date !== dateStr) };
     }));
   }, []);
 
@@ -736,7 +750,7 @@ export function AppProvider({ children }) {
       addGroup, updateGroup,
       // Students
       registerStudent, updateStudent, deleteStudent, approveStudent,
-      submitDay, editSubmission, likeQuote, saveTasbih, addBonusPoints,
+      submitDay, editSubmission, deleteSubmission, likeQuote, saveTasbih, addBonusPoints,
       // Activities
       addActivity, updateActivity,
       // Periods

@@ -39,6 +39,7 @@ function mapSubmission(row) {
     completedActivities: row.completed_activities || [],
     quote:               row.quote || '',
     quoteLikes:          row.quote_likes || [],
+    ...(typeof row.score_override === 'number' ? { scoreOverride: row.score_override } : {}),
   };
 }
 
@@ -138,6 +139,7 @@ function mapChallenge(row) {
     endDate:          row.end_date         || '',
     isActive:         row.is_active        ?? true,
     activities:       row.activities       || [],
+    periods:          row.periods          || [],
     createdAt:        row.created_at       || '',
   };
 }
@@ -530,14 +532,18 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
   return true;
 }
 
-export async function dbEditSubmission(studentId, dateStr, completedActivities) {
+export async function dbEditSubmission(studentId, dateStr, completedActivities, scoreOverride) {
   console.log('[db] editSubmission:', studentId, dateStr);
   const { data: existing } = await supabase
     .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
 
+  const updatePayload = { completed_activities: completedActivities };
+  if (typeof scoreOverride === 'number') updatePayload.score_override = scoreOverride;
+  else updatePayload.score_override = null;
+
   if (existing) {
     const { error } = await supabase.from('submissions')
-      .update({ completed_activities: completedActivities })
+      .update(updatePayload)
       .eq('student_id', studentId).eq('date', dateStr);
     if (error) { console.error('[db] editSubmission update — FAILED:', error); return false; }
   } else {
@@ -546,11 +552,23 @@ export async function dbEditSubmission(studentId, dateStr, completedActivities) 
       student_id:           studentId,
       date:                 dateStr,
       completed_activities: completedActivities,
+      score_override:       typeof scoreOverride === 'number' ? scoreOverride : null,
       quote:                '',
       quote_likes:          [],
     });
     if (error) { console.error('[db] editSubmission insert — FAILED:', error); return false; }
   }
+  return true;
+}
+
+export async function dbDeleteSubmission(studentId, dateStr) {
+  console.log('[db] deleteSubmission:', studentId, dateStr);
+  const { error } = await supabase
+    .from('submissions')
+    .delete()
+    .eq('student_id', studentId)
+    .eq('date', dateStr);
+  if (error) { console.error('[db] deleteSubmission — FAILED:', error); return false; }
   return true;
 }
 
@@ -848,6 +866,7 @@ export async function dbUpdateChallenge(id, fields) {
   if (fields.endDate          !== undefined) row.end_date           = fields.endDate;
   if (fields.isActive         !== undefined) row.is_active          = fields.isActive;
   if (fields.activities       !== undefined) row.activities         = fields.activities;
+  if (fields.periods          !== undefined) row.periods            = fields.periods;
 
   const { error } = await supabase.from('challenges').update(row).eq('id', id);
   if (error) { console.error('[db] updateChallenge — Supabase write FAILED:', error); return false; }

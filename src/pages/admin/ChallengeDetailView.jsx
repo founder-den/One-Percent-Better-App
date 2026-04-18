@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useApp } from '../../context/AppContext.jsx';
 import { supabase } from '../../services/supabase.js';
 import {
@@ -37,8 +37,8 @@ function Donut({ pct, size = 80, stroke = 9 }) {
   );
 }
 
-// ─── Activities sub-tab ───────────────────────────────────────────────
-function ChallengeActivitiesTab({ challenge, onUpdate }) {
+// ─── Reusable mini activity editor (used in Activities tab and per-period) ──
+function ActivityEditor({ activities, onUpdate, emptyText = 'No activities yet.' }) {
   const [name,     setName]     = useState('');
   const [points,   setPoints]   = useState('');
   const [err,      setErr]      = useState('');
@@ -46,16 +46,14 @@ function ChallengeActivitiesTab({ challenge, onUpdate }) {
   const [editName, setEditName] = useState('');
   const [editPts,  setEditPts]  = useState('');
 
-  const activities = challenge.activities || [];
-
   function handleAdd(e) {
     e.preventDefault();
     setErr('');
-    if (!name.trim())              { setErr('Name is required.'); return; }
+    if (!name.trim())            { setErr('Name is required.'); return; }
     const pts = parseInt(points);
-    if (isNaN(pts) || pts <= 0)   { setErr('Points must be a positive number.'); return; }
+    if (isNaN(pts) || pts <= 0) { setErr('Points must be a positive number.'); return; }
     const newAct = { id: `act_${Date.now()}`, name: name.trim(), points: pts, isActive: true };
-    onUpdate({ activities: [...activities, newAct] });
+    onUpdate([...activities, newAct]);
     setName(''); setPoints('');
   }
 
@@ -63,123 +61,122 @@ function ChallengeActivitiesTab({ challenge, onUpdate }) {
     if (!editName.trim()) return;
     const pts = parseInt(editPts);
     if (isNaN(pts) || pts <= 0) return;
-    onUpdate({ activities: activities.map(a => a.id === editId ? { ...a, name: editName.trim(), points: pts } : a) });
+    onUpdate(activities.map(a => a.id === editId ? { ...a, name: editName.trim(), points: pts } : a));
     setEditId(null);
   }
 
   function toggleActive(act) {
-    onUpdate({ activities: activities.map(a => a.id === act.id ? { ...a, isActive: !(a.isActive ?? true) } : a) });
+    onUpdate(activities.map(a => a.id === act.id ? { ...a, isActive: !(a.isActive ?? true) } : a));
   }
 
   return (
-    <div className="space-y-5">
-      <Card>
-        <SectionHeading>Add Activity</SectionHeading>
-        <form onSubmit={handleAdd} className="flex items-end gap-3 flex-wrap">
-          <div className="flex-1 min-w-40">
-            <Input
-              label="Activity Name"
-              value={name}
-              onChange={e => { setName(e.target.value); setErr(''); }}
-              placeholder="e.g. Quran Reading"
-            />
-          </div>
-          <div className="w-28">
-            <Input
-              label="Points"
-              type="number"
-              value={points}
-              onChange={e => { setPoints(e.target.value); setErr(''); }}
-              placeholder="10"
-              min="1"
-            />
-          </div>
-          <Button type="submit" className="mb-4">Add</Button>
-        </form>
-        {err && <p className="text-xs text-danger -mt-2">{err}</p>}
-      </Card>
+    <div className="space-y-3">
+      <form onSubmit={handleAdd} className="flex items-end gap-3 flex-wrap">
+        <div className="flex-1 min-w-32">
+          <Input
+            label="Activity Name"
+            value={name}
+            onChange={e => { setName(e.target.value); setErr(''); }}
+            placeholder="e.g. Quran Reading"
+          />
+        </div>
+        <div className="w-24">
+          <Input
+            label="Points"
+            type="number"
+            value={points}
+            onChange={e => { setPoints(e.target.value); setErr(''); }}
+            placeholder="10"
+            min="1"
+          />
+        </div>
+        <Button type="submit" className="mb-4">Add</Button>
+      </form>
+      {err && <p className="text-xs text-danger -mt-2">{err}</p>}
 
-      <Card>
-        <SectionHeading>Activities ({activities.length})</SectionHeading>
-        {activities.length === 0 && (
-          <EmptyState icon="📋" title="No activities" text="Add challenge-specific activities above." />
-        )}
-        <div className="space-y-2">
-          {activities.map(act => {
-            const isActive = act.isActive ?? true;
-            if (editId === act.id) {
-              return (
-                <div key={act.id} className="border border-gold-d rounded-lg p-3 bg-[var(--gold-subtle)]">
-                  <div className="flex items-end gap-2 flex-wrap">
-                    <div className="flex-1 min-w-32">
-                      <Input label="Name" value={editName} onChange={e => setEditName(e.target.value)} />
-                    </div>
-                    <div className="w-24">
-                      <Input label="Points" type="number" value={editPts} onChange={e => setEditPts(e.target.value)} min="1" />
-                    </div>
-                    <div className="flex gap-2 mb-4">
-                      <Button size="sm" onClick={saveEdit}>Save</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>Cancel</Button>
-                    </div>
+      {activities.length === 0 && (
+        <p className="text-xs text-muted">{emptyText}</p>
+      )}
+      <div className="space-y-1.5">
+        {activities.map(act => {
+          const isActive = act.isActive ?? true;
+          if (editId === act.id) {
+            return (
+              <div key={act.id} className="border border-gold-d rounded-lg p-3 bg-[var(--gold-subtle)]">
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex-1 min-w-32">
+                    <Input label="Name" value={editName} onChange={e => setEditName(e.target.value)} />
+                  </div>
+                  <div className="w-24">
+                    <Input label="Points" type="number" value={editPts} onChange={e => setEditPts(e.target.value)} min="1" />
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <Button size="sm" onClick={saveEdit}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditId(null)}>Cancel</Button>
                   </div>
                 </div>
-              );
-            }
-            return (
-              <div
-                key={act.id}
-                className={`flex items-center gap-3 py-3 px-4 rounded-lg border transition-all
-                  ${isActive ? 'border-border bg-bg-card2' : 'border-border bg-surface opacity-50'}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm text-primary">{act.name}</span>
-                  <span className="ml-2 text-xs text-gold font-semibold">+{act.points} pts</span>
-                </div>
-                <Badge variant={isActive ? 'success' : 'muted'}>{isActive ? 'Active' : 'Inactive'}</Badge>
-                <Button
-                  size="xs" variant="ghost"
-                  onClick={() => { setEditId(act.id); setEditName(act.name); setEditPts(String(act.points)); }}
-                >Edit</Button>
-                <Button size="xs" variant={isActive ? 'ghost' : 'success'} onClick={() => toggleActive(act)}>
-                  {isActive ? 'Disable' : 'Enable'}
-                </Button>
               </div>
             );
-          })}
-        </div>
+          }
+          return (
+            <div
+              key={act.id}
+              className={`flex items-center gap-3 py-2.5 px-3 rounded-lg border transition-all
+                ${isActive ? 'border-border bg-bg-card2' : 'border-border bg-surface opacity-50'}`}
+            >
+              <div className="flex-1 min-w-0">
+                <span className="text-sm text-primary">{act.name}</span>
+                <span className="ml-2 text-xs text-gold font-semibold">+{act.points} pts</span>
+              </div>
+              <Badge variant={isActive ? 'success' : 'muted'}>{isActive ? 'Active' : 'Inactive'}</Badge>
+              <Button
+                size="xs" variant="ghost"
+                onClick={() => { setEditId(act.id); setEditName(act.name); setEditPts(String(act.points)); }}
+              >Edit</Button>
+              <Button size="xs" variant={isActive ? 'ghost' : 'success'} onClick={() => toggleActive(act)}>
+                {isActive ? 'Disable' : 'Enable'}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Activities sub-tab ───────────────────────────────────────────────
+function ChallengeActivitiesTab({ challenge, onUpdate }) {
+  const activities = challenge.activities || [];
+  return (
+    <div className="space-y-5">
+      <Card>
+        <SectionHeading>Activities ({activities.length})</SectionHeading>
+        <ActivityEditor
+          activities={activities}
+          onUpdate={updated => onUpdate({ activities: updated })}
+          emptyText="Add challenge-specific activities above."
+        />
       </Card>
     </div>
   );
 }
 
 // ─── Periods sub-tab ──────────────────────────────────────────────────
-// Periods are stored in the `periods` jsonb column (not mapped by db.js),
-// so we read/write via supabase directly and keep local state.
-function ChallengePeriodsTab({ challengeId }) {
-  const [periods,  setPeriods]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
+// Periods are stored in challenge.periods jsonb column.
+// Part 1: countForAllTime checkbox per period
+// Part 2: per-period activities (expandable)
+function ChallengePeriodsTab({ challenge, onUpdate }) {
+  const periods = challenge.periods || [];
+  const sorted  = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
+
   const [name,     setName]     = useState('');
   const [start,    setStart]    = useState('');
   const [end,      setEnd]      = useState('');
   const [err,      setErr]      = useState('');
+  const [expanded, setExpanded] = useState({}); // pid → bool
 
-  const sorted = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
-
-  useEffect(() => {
-    supabase
-      .from('challenges')
-      .select('periods')
-      .eq('id', challengeId)
-      .maybeSingle()
-      .then(({ data }) => {
-        setPeriods(data?.periods || []);
-        setLoading(false);
-      });
-  }, [challengeId]);
-
-  async function persist(updated) {
-    setPeriods(updated);
-    await supabase.from('challenges').update({ periods: updated }).eq('id', challengeId);
+  function persist(updated) {
+    onUpdate({ periods: updated });
   }
 
   function handleAdd(e) {
@@ -190,7 +187,15 @@ function ChallengePeriodsTab({ challengeId }) {
     if (start > end)    { setErr('Start date must be before end date.'); return; }
     const overlap = periods.find(p => !(end < p.startDate || start > p.endDate));
     if (overlap)        { setErr(`Overlaps with "${overlap.name}".`); return; }
-    const newP = { id: `period_${Date.now()}`, name: name.trim(), startDate: start, endDate: end, isActive: false };
+    const newP = {
+      id: `period_${Date.now()}`,
+      name: name.trim(),
+      startDate: start,
+      endDate: end,
+      isActive: false,
+      countForAllTime: false,
+      activities: [],
+    };
     persist([...periods, newP]);
     setName(''); setStart(''); setEnd('');
   }
@@ -208,8 +213,12 @@ function ChallengePeriodsTab({ challengeId }) {
     persist(periods.filter(p => p.id !== pid));
   }
 
-  if (loading) {
-    return <p className="text-sm text-muted mt-6">Loading periods…</p>;
+  function toggleCountForAllTime(pid) {
+    persist(periods.map(p => p.id === pid ? { ...p, countForAllTime: !p.countForAllTime } : p));
+  }
+
+  function updatePeriodActivities(pid, activities) {
+    persist(periods.map(p => p.id === pid ? { ...p, activities } : p));
   }
 
   return (
@@ -247,6 +256,7 @@ function ChallengePeriodsTab({ challengeId }) {
               key={p.id}
               className={`border rounded-lg p-4 ${p.isActive ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2'}`}
             >
+              {/* Period header row */}
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -257,7 +267,14 @@ function ChallengePeriodsTab({ challengeId }) {
                     {formatDate(p.startDate)} – {formatDate(p.endDate)}
                   </p>
                 </div>
-                <div className="flex gap-1.5 flex-shrink-0">
+                <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setExpanded(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                  >
+                    {expanded[p.id] ? 'Hide Activities' : 'Activities'}
+                  </Button>
                   {!p.isActive && (
                     <Button size="xs" variant="success" onClick={() => activate(p.id)}>Activate</Button>
                   )}
@@ -267,6 +284,31 @@ function ChallengePeriodsTab({ challengeId }) {
                   <Button size="xs" variant="danger" onClick={() => handleDelete(p.id)}>Delete</Button>
                 </div>
               </div>
+
+              {/* Count for All-Time checkbox */}
+              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!p.countForAllTime}
+                  onChange={() => toggleCountForAllTime(p.id)}
+                  className="accent-[var(--gold)] w-4 h-4"
+                />
+                <span className="text-xs text-muted">Count for All-Time leaderboard</span>
+              </label>
+
+              {/* Per-period activities (expandable) */}
+              {expanded[p.id] && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                    Period Activities ({(p.activities || []).length})
+                  </p>
+                  <ActivityEditor
+                    activities={p.activities || []}
+                    onUpdate={acts => updatePeriodActivities(p.id, acts)}
+                    emptyText="No period-specific activities. Submissions will use challenge-level activities."
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -331,7 +373,7 @@ function ChallengeMembersTab({ challenge, students, memberships, onReload }) {
   );
 }
 
-// ─── Data sub-tab ─────────────────────────────────────────────────────
+// ─── isValidChallengeSub ──────────────────────────────────────────────
 // Returns true if a submission belongs to this challenge:
 // must fall in the date range AND contain at least one challenge activity ID.
 function isValidChallengeSub(sub, challenge, actIds) {
@@ -342,6 +384,26 @@ function isValidChallengeSub(sub, challenge, actIds) {
   return ids.some(ca => actIds.has(typeof ca === 'string' ? ca : ca?.id));
 }
 
+// ─── Points for a challenge submission ───────────────────────────────
+// Respects scoreOverride. Falls back to period activities, then challenge activities.
+function challengeSubPoints(sub, challenge) {
+  if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
+
+  // Find which period the submission date falls in (if any)
+  const periods = challenge.periods || [];
+  const period  = periods.find(p => sub.date >= p.startDate && sub.date <= p.endDate);
+  const acts    = (period && (period.activities || []).length > 0)
+    ? period.activities
+    : (challenge.activities || []);
+
+  return (sub.completedActivities || []).reduce((sum, ca) => {
+    const actId = typeof ca === 'string' ? ca : ca?.id;
+    const act   = acts.find(a => a.id === actId);
+    return sum + (act ? act.points : 0);
+  }, 0);
+}
+
+// ─── Data sub-tab ─────────────────────────────────────────────────────
 function ChallengeDataTab({ challenge, students, memberships }) {
   const memberIds = memberships
     .filter(m => m.challengeId === challenge.id)
@@ -351,20 +413,17 @@ function ChallengeDataTab({ challenge, students, memberships }) {
   const activities     = challenge.activities || [];
   const actIds         = new Set(activities.map(a => a.id));
 
-  // Only valid challenge submissions: member + date range + has ≥1 challenge activity
   const allSubs = memberStudents.flatMap(s =>
     (s.submissions || [])
       .filter(sub => isValidChallengeSub(sub, challenge, actIds))
       .map(sub => ({ ...sub, studentId: s.id }))
   );
 
-  // Section 1
-  const submittedIds  = new Set(allSubs.map(s => s.studentId));
-  const totalMembers  = memberIds.length;
+  const submittedIds   = new Set(allSubs.map(s => s.studentId));
+  const totalMembers   = memberIds.length;
   const submittedCount = submittedIds.size;
   const submissionPct  = totalMembers > 0 ? (submittedCount / totalMembers) * 100 : 0;
 
-  // Section 2 — per-activity completion rate
   const activityStats = activities.map(act => {
     const count = allSubs.filter(sub =>
       (sub.completedActivities || []).some(ca =>
@@ -375,16 +434,11 @@ function ChallengeDataTab({ challenge, students, memberships }) {
     return { ...act, count, pct };
   });
 
-  // Section 3 — top 3 leaderboard (uses same valid-submission filter)
   const leaderboard = memberStudents
     .map(s => {
       const pts = (s.submissions || [])
         .filter(sub => isValidChallengeSub(sub, challenge, actIds))
-        .reduce((sum, sub) => sum + (sub.completedActivities || []).reduce((aSum, ca) => {
-          const actId = typeof ca === 'string' ? ca : ca?.id;
-          const act   = activities.find(a => a.id === actId);
-          return aSum + (act ? act.points : 0);
-        }, 0), 0);
+        .reduce((sum, sub) => sum + challengeSubPoints(sub, challenge), 0);
       return { ...s, pts };
     })
     .sort((a, b) => b.pts - a.pts)
@@ -392,7 +446,6 @@ function ChallengeDataTab({ challenge, students, memberships }) {
 
   return (
     <div className="space-y-6 mt-2">
-      {/* Section 1 — Overall submission rate */}
       <Card>
         <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Overall Submission Rate</p>
         <div className="flex items-center gap-6">
@@ -411,7 +464,6 @@ function ChallengeDataTab({ challenge, students, memberships }) {
         </div>
       </Card>
 
-      {/* Section 2 — Activity completion rates */}
       {activities.length > 0 && (
         <Card>
           <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Activity Completion Rates</p>
@@ -431,7 +483,6 @@ function ChallengeDataTab({ challenge, students, memberships }) {
         </Card>
       )}
 
-      {/* Section 3 — Top 3 */}
       <Card>
         <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-4">Top 3 Leaderboard</p>
         {leaderboard.length === 0 ? (
@@ -460,12 +511,11 @@ function ChallengeDataTab({ challenge, students, memberships }) {
   );
 }
 
-// ─── Detail view root ─────────────────────────────────────────────────
-// ─── Submissions sub-tab ──────────────────────────────────────────
-function ChallengeSubmissionsTab({ challenge, students, memberships }) {
-  const memberIds = memberships
-    .filter(m => m.challengeId === challenge.id)
-    .map(m => m.studentId);
+// ─── Submissions sub-tab ──────────────────────────────────────────────
+function ChallengeSubmissionsTab({ challenge, students, memberships, onReload }) {
+  const { editSubmission, deleteSubmission } = useApp();
+
+  const memberIds      = memberships.filter(m => m.challengeId === challenge.id).map(m => m.studentId);
   const memberStudents = students.filter(s => memberIds.includes(s.id));
   const activities     = challenge.activities || [];
   const actIds         = new Set(activities.map(a => a.id));
@@ -473,29 +523,24 @@ function ChallengeSubmissionsTab({ challenge, students, memberships }) {
   const [filterStudent, setFilterStudent] = useState('');
   const [filterStart,   setFilterStart]   = useState('');
   const [filterEnd,     setFilterEnd]     = useState('');
+  const [editingKey,    setEditingKey]    = useState(null); // `${studentId}-${date}`
+  const [editChecked,   setEditChecked]   = useState({});
+  const [editOverride,  setEditOverride]  = useState('');
 
-  // All valid challenge submissions across all members, newest first
+  // All valid challenge submissions, newest first
   const allSubs = memberStudents
     .flatMap(s =>
       (s.submissions || [])
         .filter(sub => isValidChallengeSub(sub, challenge, actIds))
-        .map(sub => {
-          const pts = (sub.completedActivities || []).reduce((sum, ca) => {
-            const actId = typeof ca === 'string' ? ca : ca?.id;
-            const act   = activities.find(a => a.id === actId);
-            return sum + (act ? act.points : 0);
-          }, 0);
-          return {
-            ...sub,
-            studentId:   s.id,
-            studentName: s.fullName || s.username,
-            pts,
-          };
-        })
+        .map(sub => ({
+          ...sub,
+          studentId:   s.id,
+          studentName: s.fullName || s.username,
+          pts:         challengeSubPoints(sub, challenge),
+        }))
     )
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  // Apply filters
   const filtered = allSubs.filter(sub => {
     if (filterStudent && sub.studentId !== filterStudent) return false;
     if (filterStart   && sub.date < filterStart)           return false;
@@ -503,8 +548,35 @@ function ChallengeSubmissionsTab({ challenge, students, memberships }) {
     return true;
   });
 
-  const totalPts = filtered.reduce((sum, s) => sum + s.pts, 0);
+  const totalPts  = filtered.reduce((sum, s) => sum + s.pts, 0);
   const hasFilters = filterStudent || filterStart || filterEnd;
+
+  function openEdit(sub) {
+    const key     = `${sub.studentId}-${sub.date}`;
+    const checked = {};
+    (sub.completedActivities || []).forEach(ca => {
+      const id = typeof ca === 'string' ? ca : ca?.id;
+      if (id) checked[id] = true;
+    });
+    setEditChecked(checked);
+    setEditOverride(typeof sub.scoreOverride === 'number' ? String(sub.scoreOverride) : '');
+    setEditingKey(key);
+  }
+
+  async function saveEdit(sub) {
+    const ids          = activities.filter(a => editChecked[a.id]).map(a => a.id);
+    const overrideVal  = editOverride.trim() !== '' ? parseFloat(editOverride) : undefined;
+    const scoreOverride = !isNaN(overrideVal) && overrideVal !== undefined ? overrideVal : undefined;
+    await editSubmission(sub.studentId, sub.date, ids, scoreOverride);
+    setEditingKey(null);
+    onReload();
+  }
+
+  async function handleDelete(sub) {
+    if (!window.confirm(`Delete ${sub.studentName}'s submission for ${formatDate(sub.date)}?`)) return;
+    await deleteSubmission(sub.studentId, sub.date);
+    onReload();
+  }
 
   return (
     <div className="space-y-4 mt-2">
@@ -565,40 +637,97 @@ function ChallengeSubmissionsTab({ challenge, students, memberships }) {
           />
         ) : (
           <div className="space-y-2">
-            {filtered.map((sub, i) => (
-              <div
-                key={`${sub.studentId}-${sub.date}-${i}`}
-                className="flex items-start gap-3 py-3 px-4 rounded-lg border border-border bg-bg-card2"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                    <span className="text-sm font-medium text-primary">{sub.studentName}</span>
-                    <span className="text-xs text-muted">{formatDate(sub.date)}</span>
+            {filtered.map((sub, i) => {
+              const key       = `${sub.studentId}-${sub.date}`;
+              const isEditing = editingKey === key;
+
+              if (isEditing) {
+                return (
+                  <div
+                    key={`${key}-${i}`}
+                    className="py-3 px-4 rounded-lg border border-gold-d bg-[var(--gold-subtle)] space-y-3"
+                  >
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="text-sm font-medium text-primary">{sub.studentName}</span>
+                      <span className="text-xs text-muted">{formatDate(sub.date)}</span>
+                    </div>
+                    {/* Activity checkboxes */}
+                    <div className="flex flex-wrap gap-2">
+                      {activities.map(act => (
+                        <label key={act.id} className="flex items-center gap-1.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!editChecked[act.id]}
+                            onChange={() => setEditChecked(prev => ({ ...prev, [act.id]: !prev[act.id] }))}
+                            className="accent-[var(--gold)] w-4 h-4"
+                          />
+                          <span className="text-xs text-primary">{act.name}</span>
+                          <span className="text-xs text-gold">+{act.points}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {/* Score override */}
+                    <div className="flex items-end gap-3 flex-wrap">
+                      <div className="w-40">
+                        <Input
+                          label="Score Override (optional)"
+                          type="number"
+                          value={editOverride}
+                          onChange={e => setEditOverride(e.target.value)}
+                          placeholder="Leave blank to calculate"
+                          min="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => saveEdit(sub)}>Save</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingKey(null)}>Cancel</Button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(sub.completedActivities || []).map(ca => {
-                      const actId = typeof ca === 'string' ? ca : ca?.id;
-                      const act   = activities.find(a => a.id === actId);
-                      if (!act) return null;
-                      return (
-                        <span
-                          key={actId}
-                          className="text-xs px-2 py-0.5 rounded-full bg-[var(--gold-subtle)] text-gold border border-gold-d"
-                        >
-                          {act.name}
-                        </span>
-                      );
-                    })}
+                );
+              }
+
+              return (
+                <div
+                  key={`${key}-${i}`}
+                  className="flex items-start gap-3 py-3 px-4 rounded-lg border border-border bg-bg-card2"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                      <span className="text-sm font-medium text-primary">{sub.studentName}</span>
+                      <span className="text-xs text-muted">{formatDate(sub.date)}</span>
+                      {typeof sub.scoreOverride === 'number' && (
+                        <Badge variant="muted">Override</Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(sub.completedActivities || []).map(ca => {
+                        const actId = typeof ca === 'string' ? ca : ca?.id;
+                        const act   = activities.find(a => a.id === actId);
+                        if (!act) return null;
+                        return (
+                          <span
+                            key={actId}
+                            className="text-xs px-2 py-0.5 rounded-full bg-[var(--gold-subtle)] text-gold border border-gold-d"
+                          >
+                            {act.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
+                    <span className="text-sm font-bold text-gold">+{sub.pts}</span>
+                    <Button size="xs" variant="ghost" onClick={() => openEdit(sub)}>Edit</Button>
+                    <Button size="xs" variant="danger" onClick={() => handleDelete(sub)}>Delete</Button>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-gold flex-shrink-0 mt-0.5">+{sub.pts}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>
 
-      {/* Summary */}
       {filtered.length > 0 && (
         <div className="flex gap-5 px-1 text-sm text-muted">
           <span>
@@ -627,7 +756,6 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
   const { challenges, challengeMemberships, students, updateChallenge, reload } = useApp();
   const [activeTab, setActiveTab] = useState('activities');
 
-  // Always read the live challenge from context so updates reflect immediately
   const challenge = challenges.find(c => c.id === challengeId);
 
   if (!challenge) {
@@ -639,14 +767,12 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
     );
   }
 
-  // activities go through AppContext (db.js supports them)
   async function handleUpdate(fields) {
     await updateChallenge(challenge.id, fields);
   }
 
   return (
     <div className="mt-4">
-      {/* Header */}
       <button
         onClick={onBack}
         className="text-sm text-muted hover:text-primary transition-colors mb-4 flex items-center gap-1"
@@ -664,7 +790,6 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
         <p className="text-sm text-muted mb-4">{challenge.description}</p>
       )}
 
-      {/* Sub-tabs */}
       <Tabs tabs={DETAIL_TABS} active={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'activities' && (
@@ -674,7 +799,10 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
         />
       )}
       {activeTab === 'periods' && (
-        <ChallengePeriodsTab challengeId={challenge.id} />
+        <ChallengePeriodsTab
+          challenge={challenge}
+          onUpdate={handleUpdate}
+        />
       )}
       {activeTab === 'members' && (
         <ChallengeMembersTab
@@ -696,6 +824,7 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
           challenge={challenge}
           students={students}
           memberships={challengeMemberships}
+          onReload={reload}
         />
       )}
     </div>
