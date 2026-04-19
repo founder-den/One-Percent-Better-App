@@ -98,13 +98,31 @@ function AnnouncementRow({ challenge, studentId, joinChallenge }) {
   );
 }
 
+const DISMISSED_KEY = 'dismissed_announcements';
+
+function getDismissed() {
+  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); } catch { return []; }
+}
+function dismiss(id) {
+  const prev = getDismissed();
+  if (!prev.includes(id)) localStorage.setItem(DISMISSED_KEY, JSON.stringify([...prev, id]));
+}
+
 export default function HomeTab() {
   const { student } = useAuth();
   const { theme }   = useTheme();
   const {
     community, findGroupById,
     challenges, challengeMemberships, joinChallenge,
+    announcements,
   } = useApp();
+
+  const [dismissed, setDismissed] = useState(() => getDismissed());
+
+  function handleDismiss(id) {
+    dismiss(id);
+    setDismissed(prev => [...prev, id]);
+  }
 
   const group = findGroupById(student.groupId);
 
@@ -119,12 +137,25 @@ export default function HomeTab() {
 
   const myChallenges = challenges.filter(c => myIds.includes(c.id));
 
-  // Announcements: visible, group-relevant, not yet joined
-  const announcements = challenges.filter(c =>
+  // Challenge announcements: visible challenges not yet joined
+  const challengeAnnouncements = challenges.filter(c =>
     c.isVisible &&
     (c.visibleToGroups.length === 0 || c.visibleToGroups.includes(student.groupId)) &&
     !myIds.includes(c.id)
   );
+
+  // Admin announcements: active, visible to this group, not dismissed
+  const adminAnnouncements = announcements
+    .filter(a =>
+      a.isActive &&
+      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId)) &&
+      !dismissed.includes(a.id)
+    )
+    .sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
 
   return (
     <div className="mt-6 space-y-5">
@@ -158,6 +189,33 @@ export default function HomeTab() {
           )}
         </div>
       </Card>
+
+      {/* Admin Announcements — above My Challenges */}
+      {adminAnnouncements.length > 0 && (
+        <div className="space-y-2">
+          {adminAnnouncements.map(ann => (
+            <div
+              key={ann.id}
+              className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
+              style={{ borderLeft: '3px solid var(--gold)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary">{ann.title}</p>
+                {ann.message && (
+                  <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>
+                )}
+              </div>
+              <button
+                onClick={() => handleDismiss(ann.id)}
+                className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* My Challenges */}
       <Card>
@@ -213,12 +271,12 @@ export default function HomeTab() {
         )}
       </Card>
 
-      {/* Announcements */}
-      {announcements.length > 0 && (
+      {/* Challenge Announcements */}
+      {challengeAnnouncements.length > 0 && (
         <Card>
           <SectionHeading>Announcements</SectionHeading>
           <div className="space-y-2">
-            {announcements.map(c => (
+            {challengeAnnouncements.map(c => (
               <AnnouncementRow
                 key={c.id}
                 challenge={c}

@@ -153,6 +153,18 @@ function mapChallengeMembership(row) {
   };
 }
 
+function mapAnnouncement(row) {
+  return {
+    id:              row.id,
+    title:           row.title,
+    message:         row.message          || '',
+    visibleToGroups: row.visible_to_groups || [],
+    isPinned:        row.is_pinned        ?? false,
+    isActive:        row.is_active        ?? true,
+    createdAt:       row.created_at       || '',
+  };
+}
+
 // ─── ENSURE COMMUNITY ─────────────────────────────────────────────
 let _communityId = null;
 
@@ -223,24 +235,25 @@ export async function loadAll() {
     'students', 'submissions', 'bonus_points', 'books', 'program_completions',
     'activities', 'periods', 'global_tasbihs', 'personal_tasbih_templates',
     'programs', 'collective_task_counts', 'admin_settings',
-    'challenges', 'challenge_memberships',
+    'challenges', 'challenge_memberships', 'announcements',
   ];
 
   const [
-    { data: studentRows,     error: e1  },
-    { data: submissionRows,  error: e2  },
-    { data: bonusRows,       error: e3  },
-    { data: bookRows,        error: e4  },
-    { data: completionRows,  error: e5  },
-    { data: activityRows,    error: e6  },
-    { data: periodRows,      error: e7  },
-    { data: tasbihRows,      error: e8  },
-    { data: templateRows,    error: e9  },
-    { data: programRows,     error: e10 },
-    { data: ctcRows,         error: e11 },
-    { data: settingsRow,     error: e12 },
-    { data: challengeRows,   error: e13 },
-    { data: membershipRows,  error: e14 },
+    { data: studentRows,      error: e1  },
+    { data: submissionRows,   error: e2  },
+    { data: bonusRows,        error: e3  },
+    { data: bookRows,         error: e4  },
+    { data: completionRows,   error: e5  },
+    { data: activityRows,     error: e6  },
+    { data: periodRows,       error: e7  },
+    { data: tasbihRows,       error: e8  },
+    { data: templateRows,     error: e9  },
+    { data: programRows,      error: e10 },
+    { data: ctcRows,          error: e11 },
+    { data: settingsRow,      error: e12 },
+    { data: challengeRows,    error: e13 },
+    { data: membershipRows,   error: e14 },
+    { data: announcementRows, error: e15 },
     community,
     groups,
   ] = await Promise.all([
@@ -258,11 +271,12 @@ export async function loadAll() {
     supabase.from('admin_settings').select('*').eq('id', 'main').maybeSingle(),
     supabase.from('challenges').select('*'),
     supabase.from('challenge_memberships').select('*'),
+    supabase.from('announcements').select('*'),
     dbLoadCommunity(),
     dbLoadGroups(),
   ]);
 
-  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14].forEach((e, i) => {
+  [e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14,e15].forEach((e, i) => {
     if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
@@ -292,14 +306,15 @@ export async function loadAll() {
     adminSettings,
     groups,
     students,
-    activities:              (activityRows    || []).map(mapActivity),
-    periods:                 (periodRows      || []).map(mapPeriod),
-    globalTasbihs:           (tasbihRows      || []).map(mapGlobalTasbih),
-    personalTasbihTemplates: (templateRows    || []).map(mapPersonalTemplate),
-    programs:                (programRows     || []).map(mapProgram),
+    activities:              (activityRows      || []).map(mapActivity),
+    periods:                 (periodRows        || []).map(mapPeriod),
+    globalTasbihs:           (tasbihRows        || []).map(mapGlobalTasbih),
+    personalTasbihTemplates: (templateRows      || []).map(mapPersonalTemplate),
+    programs:                (programRows       || []).map(mapProgram),
     collectiveTaskCounts,
-    challenges:              (challengeRows   || []).map(mapChallenge),
-    challengeMemberships:    (membershipRows  || []).map(mapChallengeMembership),
+    challenges:              (challengeRows     || []).map(mapChallenge),
+    challengeMemberships:    (membershipRows    || []).map(mapChallengeMembership),
+    announcements:           (announcementRows  || []).map(mapAnnouncement),
   };
 }
 
@@ -930,6 +945,54 @@ export async function dbLoadChallengeMemberships(challengeId) {
     console.error('[db] loadChallengeMemberships — Supabase error:', e);
     return [];
   }
+}
+
+// ─── ANNOUNCEMENTS ────────────────────────────────────────────────
+export async function dbLoadAnnouncements() {
+  console.log('[db] dbLoadAnnouncements — fetching from Supabase');
+  try {
+    const { data, error } = await supabase.from('announcements').select('*');
+    if (error) throw error;
+    return (data || []).map(mapAnnouncement);
+  } catch (e) {
+    console.error('[db] dbLoadAnnouncements — Supabase error:', e);
+    return [];
+  }
+}
+
+export async function dbAddAnnouncement(ann) {
+  console.log('[db] addAnnouncement:', ann.title);
+  const { error } = await supabase.from('announcements').insert({
+    id:               ann.id,
+    title:            ann.title,
+    message:          ann.message          || '',
+    visible_to_groups: ann.visibleToGroups || [],
+    is_pinned:        ann.isPinned         ?? false,
+    is_active:        ann.isActive         ?? true,
+  });
+  if (error) { console.error('[db] addAnnouncement — Supabase write FAILED:', error); return null; }
+  return ann;
+}
+
+export async function dbUpdateAnnouncement(id, fields) {
+  console.log('[db] updateAnnouncement:', id);
+  const row = {};
+  if (fields.title            !== undefined) row.title             = fields.title;
+  if (fields.message          !== undefined) row.message           = fields.message;
+  if (fields.visibleToGroups  !== undefined) row.visible_to_groups = fields.visibleToGroups;
+  if (fields.isPinned         !== undefined) row.is_pinned         = fields.isPinned;
+  if (fields.isActive         !== undefined) row.is_active         = fields.isActive;
+
+  const { error } = await supabase.from('announcements').update(row).eq('id', id);
+  if (error) { console.error('[db] updateAnnouncement — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+export async function dbDeleteAnnouncement(id) {
+  console.log('[db] deleteAnnouncement:', id);
+  const { error } = await supabase.from('announcements').delete().eq('id', id);
+  if (error) { console.error('[db] deleteAnnouncement — Supabase write FAILED:', error); return false; }
+  return true;
 }
 
 // ─── Realtime subscriptions ───────────────────────────────────────

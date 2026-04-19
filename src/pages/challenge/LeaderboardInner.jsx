@@ -153,22 +153,24 @@ function ChallengePeriodTab({ student, challenge, memberStudents, activities }) 
 }
 
 function ChallengeAllTimeTab({ student, challenge, memberStudents, activities }) {
-  // Filter to challenge date range when available; otherwise all-time with challenge activities
-  const hasDateRange = !!(challenge.startDate && challenge.endDate);
-  const lb = hasDateRange
-    ? buildLeaderboard(memberStudents, activities, 'period', {
-        periodStart: challenge.startDate,
-        periodEnd:   challenge.endDate,
-      })
-    : buildLeaderboard(memberStudents, activities, 'total');
+  const periods = challenge.periods || [];
+  const allTimePeriods = periods.filter(p => p.countForAllTime);
 
-  const description = hasDateRange
-    ? `${formatDate(challenge.startDate)} – ${formatDate(challenge.endDate)}`
-    : 'Total points using challenge activities';
+  if (allTimePeriods.length === 0) {
+    return (
+      <EmptyState
+        icon="📊"
+        title="No periods selected for All-Time"
+        text="Go to Admin → Challenge → Periods to mark periods."
+      />
+    );
+  }
+
+  const lb = buildLeaderboard(memberStudents, activities, 'alltime', { periods });
 
   return (
     <div>
-      <p className="text-xs text-muted mb-4">{description}</p>
+      <p className="text-xs text-muted mb-4">Based on admin-selected periods</p>
       <div className="space-y-2">
         {lb.map(e => <LbRow key={e.id} entry={e} highlight={e.id === student.id} />)}
         {lb.length === 0 && <EmptyState icon="🏆" title="No data yet" />}

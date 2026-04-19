@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import { useApp }  from '../../context/AppContext.jsx';
 import {
-  Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge,
+  Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge, Tabs,
 } from '../../components/ui.jsx';
 import { formatDate } from '../../services/data.js';
+import AnnouncementsAdminTab from './AnnouncementsAdminTab.jsx';
+
+const PROGRAM_SUBTABS = [
+  { key: 'programs',      label: 'Programs' },
+  { key: 'announcements', label: 'Announcements' },
+];
 
 // ─── Progress bar (local) ─────────────────────────────────────────
 function ProgressBar({ value, max, className = '' }) {
@@ -197,6 +203,8 @@ export default function ProgramsAdminTab() {
     addProgram, updateProgram, deleteProgram, setProgramsLabel,
   } = useApp();
 
+  const [subTab, setSubTab] = useState('programs');
+
   // Programs label
   const [labelEdit, setLabelEdit] = useState(programsLabel);
   const [labelSaved, setLabelSaved] = useState(false);
@@ -381,6 +389,11 @@ export default function ProgramsAdminTab() {
 
   return (
     <div className="space-y-5 max-w-2xl">
+      <Tabs tabs={PROGRAM_SUBTABS} active={subTab} onChange={setSubTab} />
+
+      {subTab === 'announcements' && <AnnouncementsAdminTab />}
+
+      {subTab === 'programs' && <>
 
       {/* Programs label */}
       <Card>
@@ -654,6 +667,8 @@ export default function ProgramsAdminTab() {
           />
         )}
       </Modal>
+
+      </>}
     </div>
   );
 }

@@ -24,6 +24,7 @@ import {
   dbSavePersonalTasbihs,
   dbAddChallenge, dbUpdateChallenge, dbDeleteChallenge,
   dbJoinChallenge,
+  dbAddAnnouncement, dbUpdateAnnouncement, dbDeleteAnnouncement,
   subscribeToGlobalTasbihs,
   subscribeToStudents,
   subscribeToSubmissions,
@@ -60,6 +61,7 @@ export function AppProvider({ children }) {
   const [collectiveTaskCounts,    setCollectiveCounts]    = useState({});
   const [challenges,              setChallenges]          = useState([]);
   const [challengeMemberships,    setChallengeMemberships] = useState([]);
+  const [announcements,           setAnnouncements]        = useState([]);
 
   // ── Load everything on mount ──────────────────────────────────
   const reload = useCallback(async () => {
@@ -129,6 +131,7 @@ export function AppProvider({ children }) {
       setCollectiveCounts(data.collectiveTaskCounts);
       setChallenges(data.challenges || []);
       setChallengeMemberships(data.challengeMemberships || []);
+      setAnnouncements(data.announcements || []);
     } catch (err) {
       console.error('[AppContext] load failed:', err);
       setDbError(err.message || 'Failed to load data. Check your connection.');
@@ -714,6 +717,38 @@ export function AppProvider({ children }) {
     return collectiveTaskCounts[taskId] || { count: 0, completedTimes: 0 };
   }, [collectiveTaskCounts]);
 
+  // ── Announcements ─────────────────────────────────────────────
+  const addAnnouncement = useCallback(async (fields) => {
+    console.log('[AppContext] addAnnouncement:', fields.title);
+    const newA = {
+      id:              `ann_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+      title:           fields.title           || '',
+      message:         fields.message         || '',
+      visibleToGroups: fields.visibleToGroups || [],
+      isPinned:        fields.isPinned        ?? false,
+      isActive:        fields.isActive        ?? true,
+      createdAt:       new Date().toISOString(),
+    };
+    const confirmed = await dbAddAnnouncement(newA);
+    if (!confirmed) { console.error('[AppContext] addAnnouncement failed — state NOT updated'); return null; }
+    setAnnouncements(a => [...a, confirmed]);
+    return confirmed;
+  }, []);
+
+  const updateAnnouncement = useCallback(async (id, fields) => {
+    console.log('[AppContext] updateAnnouncement:', id);
+    const ok = await dbUpdateAnnouncement(id, fields);
+    if (!ok) { console.error('[AppContext] updateAnnouncement failed — state NOT updated'); return; }
+    setAnnouncements(a => a.map(x => x.id === id ? { ...x, ...fields } : x));
+  }, []);
+
+  const deleteAnnouncement = useCallback(async (id) => {
+    console.log('[AppContext] deleteAnnouncement:', id);
+    const ok = await dbDeleteAnnouncement(id);
+    if (!ok) { console.error('[AppContext] deleteAnnouncement failed — state NOT updated'); return; }
+    setAnnouncements(a => a.filter(x => x.id !== id));
+  }, []);
+
   // ── Full reset ────────────────────────────────────────────────
   const resetAll = useCallback(async () => {
     await reload();
@@ -769,6 +804,9 @@ export function AppProvider({ children }) {
       // Challenges
       challenges, challengeMemberships,
       addChallenge, updateChallenge, deleteChallenge, joinChallenge,
+      // Announcements
+      announcements,
+      addAnnouncement, updateAnnouncement, deleteAnnouncement,
       // Program Completions
       getStudentProgramCompletions, saveProgramCompletion,
       // Collective Tasks
