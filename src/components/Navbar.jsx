@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Home, Trophy, Wrench, BookOpen, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth }  from '../context/AuthContext.jsx';
@@ -39,6 +39,10 @@ export default function Navbar() {
   const { student, logoutStudent } = useAuth();
   const { theme, toggle }          = useTheme();
   const [collapsed, setCollapsed]  = useState(getInitialCollapsed);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--sidebar-width', collapsed ? '56px' : '220px');
+  }, [collapsed]);
 
   function toggleCollapsed() {
     setCollapsed(v => {

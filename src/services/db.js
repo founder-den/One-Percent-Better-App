@@ -618,6 +618,23 @@ export async function dbAddBonusPoints(studentId, date, points, reason) {
   return bp;
 }
 
+export async function dbUpdateBonusPoints(_studentId, bonusId, fields) {
+  console.log('[db] updateBonusPoints:', bonusId);
+  const row = {};
+  if (fields.points !== undefined) row.points = Number(fields.points);
+  if (fields.reason !== undefined) row.reason = fields.reason;
+  const { error } = await supabase.from('bonus_points').update(row).eq('id', bonusId);
+  if (error) { console.error('[db] updateBonusPoints — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+export async function dbDeleteBonusPoints(_studentId, bonusId) {
+  console.log('[db] deleteBonusPoints:', bonusId);
+  const { error } = await supabase.from('bonus_points').delete().eq('id', bonusId);
+  if (error) { console.error('[db] deleteBonusPoints — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
 // ─── STUDENT TASBIH ───────────────────────────────────────────────
 export async function dbUpdateTasbih(studentId, tasbih) {
   console.log('[db] updateTasbih:', studentId);

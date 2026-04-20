@@ -12,7 +12,7 @@ import {
   dbRegisterStudent, dbUpdateStudent, dbDeleteStudent,
   dbSubmitDay, dbEditSubmission, dbDeleteSubmission,
   dbToggleQuoteLike,
-  dbAddBonusPoints,
+  dbAddBonusPoints, dbUpdateBonusPoints, dbDeleteBonusPoints,
   dbUpdateTasbih,
   dbAddGlobalTasbih, dbUpdateGlobalTasbih,
   dbAddPersonalTemplate, dbUpdatePersonalTemplate, dbDeletePersonalTemplate,
@@ -347,6 +347,26 @@ export function AppProvider({ children }) {
     }));
     return students.find(st => st.id === studentId) || null;
   }, [students]);
+
+  const updateBonusPoints = useCallback(async (studentId, bonusId, fields) => {
+    console.log('[AppContext] updateBonusPoints:', { studentId, bonusId, fields });
+    const ok = await dbUpdateBonusPoints(studentId, bonusId, fields);
+    if (!ok) { console.error('[AppContext] updateBonusPoints failed — state NOT updated'); return; }
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      return { ...st, bonusPoints: (st.bonusPoints || []).map(b => b.id === bonusId ? { ...b, ...fields } : b) };
+    }));
+  }, []);
+
+  const deleteBonusPoints = useCallback(async (studentId, bonusId) => {
+    console.log('[AppContext] deleteBonusPoints:', { studentId, bonusId });
+    const ok = await dbDeleteBonusPoints(studentId, bonusId);
+    if (!ok) { console.error('[AppContext] deleteBonusPoints failed — state NOT updated'); return; }
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      return { ...st, bonusPoints: (st.bonusPoints || []).filter(b => b.id !== bonusId) };
+    }));
+  }, []);
 
   const saveTasbih = useCallback(async (student, tasbih) => {
     console.log('[AppContext] saveTasbih:', { studentId: student.id });
@@ -785,7 +805,8 @@ export function AppProvider({ children }) {
       addGroup, updateGroup,
       // Students
       registerStudent, updateStudent, deleteStudent, approveStudent,
-      submitDay, editSubmission, deleteSubmission, likeQuote, saveTasbih, addBonusPoints,
+      submitDay, editSubmission, deleteSubmission, likeQuote, saveTasbih,
+      addBonusPoints, updateBonusPoints, deleteBonusPoints,
       // Activities
       addActivity, updateActivity,
       // Periods

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { useApp }  from '../../context/AppContext.jsx';
 import {
   Card, Button, Badge, Avatar, SectionHeading, EmptyState,
@@ -11,6 +12,7 @@ export default function StudentsTab({ groupId }) {
   const {
     groups, students,
     approveStudent, deleteStudent, updateStudent, editSubmission, addBonusPoints,
+    updateBonusPoints, deleteBonusPoints,
     addPersonalTasbih, deletePersonalTasbih,
     activitiesForGroup, studentsForGroup,
   } = useApp();
@@ -59,6 +61,13 @@ export default function StudentsTab({ groupId }) {
   const [bonusReason, setBonusReason] = useState('');
   const [bonusErr,    setBonusErr]    = useState('');
   const [bonusOk,     setBonusOk]     = useState('');
+
+  // Collapsed/expanded student rows
+  const [expandedStudentId, setExpandedStudentId] = useState(null);
+
+  // Inline bonus editing
+  const [editingBonusId,    setEditingBonusId]    = useState(null);
+  const [editBonusFields,   setEditBonusFields]   = useState({ points: '', reason: '' });
 
   // ── Edit submission ──────────────────────────────────────────────
   function openEdit(st, sub) {
@@ -178,97 +187,172 @@ export default function StudentsTab({ groupId }) {
           <EmptyState icon="👤" title="No active students yet" text="Students appear here once registered and approved. Share your group code to get started." />
         )}
         {active.map(st => {
-          const totalPts  = getStudentTotalPoints(st, groupActs);
-          const subs      = [...(st.submissions || [])].sort((a, b) => b.date.localeCompare(a.date));
+          const isExpanded    = expandedStudentId === st.id;
+          const totalPts      = getStudentTotalPoints(st, groupActs);
+          const subs          = [...(st.submissions || [])].sort((a, b) => b.date.localeCompare(a.date));
           const bonusPtsTotal = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
 
           return (
-            <div key={st.id} className="mb-6 pb-5 border-b border-border last:border-0 last:pb-0 last:mb-0">
-              <div className="flex items-start gap-3 mb-2">
+            <div key={st.id} className="border-b border-border last:border-0">
+              {/* ── Compact header row (always visible) ── */}
+              <div
+                className="flex items-center gap-3 py-3 cursor-pointer hover:bg-bg-card2 rounded-lg px-2 -mx-2 transition-colors"
+                onClick={() => {
+                  setEditingBonusId(null);
+                  setExpandedStudentId(isExpanded ? null : st.id);
+                }}
+              >
                 <Avatar src={st.avatar} name={st.fullName} size="sm" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-primary">{st.fullName}</p>
-                  <p className="text-xs text-muted">@{st.username} · {totalPts} pts total · {subs.length} days</p>
-                  {st.university && <p className="text-xs text-muted">🎓 {st.university}</p>}
-                  {st.phone      && <p className="text-xs text-muted">📞 {st.phone}</p>}
-                  {bonusPtsTotal > 0 && (
-                    <p className="text-xs text-gold">🎁 {bonusPtsTotal} bonus pts</p>
-                  )}
+                  <p className="text-xs text-muted">
+                    @{st.username} · {totalPts} pts · {subs.length} days
+                    {bonusPtsTotal !== 0 && <span className="text-gold"> · 🎁 {bonusPtsTotal > 0 ? '+' : ''}{bonusPtsTotal}</span>}
+                  </p>
                 </div>
-                <div className="flex flex-col gap-1 items-end flex-shrink-0">
-                  <Button variant="ghost" size="xs" onClick={() => openInfo(st)}>Edit</Button>
-                  <Button variant="outline" size="xs" onClick={() => openBonus(st)}>Bonus</Button>
-                  <Button variant="ghost" size="xs" onClick={() => openPt(st)}>Tasbihs</Button>
-                  <button
-                    onClick={() => setRevealedPw(id => id === st.id ? null : st.id)}
-                    title="View password"
-                    className="text-xs text-muted hover:text-primary transition-colors px-1"
-                  >
-                    {revealedPw === st.id ? '🙈' : '👁'}
-                  </button>
-                  {revealedPw === st.id && (
-                    <span className="text-xs font-mono bg-bg-card2 border border-border rounded px-2 py-0.5 text-primary select-all max-w-[120px] truncate">
-                      {st.password}
-                    </span>
-                  )}
-                  <Button variant="danger" size="xs" onClick={() => { if (window.confirm(`Delete ${st.fullName}? This cannot be undone.`)) deleteStudent(st.id); }}>Delete</Button>
-                </div>
+                <ChevronDown
+                  size={16}
+                  strokeWidth={1.75}
+                  className="text-muted flex-shrink-0 transition-transform duration-200"
+                  style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                />
               </div>
 
-              {/* Bonus points history */}
-              {(st.bonusPoints || []).length > 0 && (
-                <div className="pl-11 mb-2">
-                  {[...(st.bonusPoints || [])].sort((a,b) => b.date.localeCompare(a.date)).slice(0, 3).map(b => (
-                    <div key={b.id} className="flex items-center gap-2 text-xs text-muted mb-0.5">
-                      <span className="text-gold font-semibold">+{b.points}</span>
-                      <span className="text-primary">{b.reason}</span>
-                      <span className="ml-auto">{formatDate(b.date)}</span>
+              {/* ── Expanded details ── */}
+              {isExpanded && (
+                <div className="pb-4 space-y-3">
+                  {/* Profile info */}
+                  {(st.university || st.phone || groups.find(g => g.id === st.groupId)) && (
+                    <div className="pl-11 space-y-0.5">
+                      {st.university && <p className="text-xs text-muted">🎓 {st.university}</p>}
+                      {st.phone      && <p className="text-xs text-muted">📞 {st.phone}</p>}
+                      {groups.find(g => g.id === st.groupId) && (
+                        <p className="text-xs text-muted">👥 {groups.find(g => g.id === st.groupId).name}</p>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Recent submissions */}
-              {subs.length > 0 ? (
-                <div className="pl-11 space-y-1">
-                  {subs.slice(0, 5).map(sub => {
-                    const pts = submissionPoints(sub, groupActs);
-                    return (
-                      <div key={sub.date} className="flex items-center gap-2 text-xs text-muted">
-                        <span className="w-24 flex-shrink-0 text-primary">{formatDate(sub.date)}</span>
-                        <span className="text-gold font-semibold">+{pts}</span>
-                        <span>({(sub.completedActivities || []).length} acts)</span>
-                        <Button variant="ghost" size="xs" onClick={() => openEdit(st, sub)}>Edit</Button>
-                      </div>
-                    );
-                  })}
-                  {subs.length > 5 && (
-                    <p className="text-xs text-muted">… and {subs.length - 5} more</p>
                   )}
-                </div>
-              ) : (
-                <p className="pl-11 text-xs text-muted">No submissions yet.</p>
-              )}
 
-              {/* Personal tasbihs */}
-              {(st.personalTasbihs || []).length > 0 && (
-                <div className="pl-11 mt-2 space-y-1">
-                  <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Personal Tasbihs</p>
-                  {(st.personalTasbihs || []).map(pt => {
-                    const pct = pt.target > 0 ? Math.min(100, Math.round((pt.current / pt.target) * 100)) : 0;
-                    return (
-                      <div key={pt.id} className="flex items-center gap-2 text-xs text-muted">
-                        <span className="text-primary flex-1 min-w-0 truncate">{pt.title}</span>
-                        <span className="text-gold">{pt.current}/{pt.target} ({pct}%)</span>
-                        {pt.resetType !== 'none' && <span className="text-muted italic">{pt.resetType}</span>}
-                        <button
-                          onClick={() => { if (window.confirm(`Remove "${pt.title}" from ${st.fullName}?`)) deletePersonalTasbih(st.id, pt.id); }}
-                          className="text-danger hover:text-red-400 transition-colors ml-1"
-                          title="Delete"
-                        >✕</button>
+                  {/* Action buttons */}
+                  <div className="pl-11 flex items-center gap-2 flex-wrap">
+                    <Button variant="ghost"   size="xs" onClick={() => openInfo(st)}>Edit</Button>
+                    <Button variant="outline" size="xs" onClick={() => openBonus(st)}>Bonus</Button>
+                    <Button variant="ghost"   size="xs" onClick={() => openPt(st)}>Tasbihs</Button>
+                    <button
+                      onClick={() => setRevealedPw(id => id === st.id ? null : st.id)}
+                      className="text-xs text-muted hover:text-primary transition-colors px-1"
+                    >
+                      {revealedPw === st.id ? '🙈' : '👁'}
+                    </button>
+                    {revealedPw === st.id && (
+                      <span className="text-xs font-mono bg-bg-card2 border border-border rounded px-2 py-0.5 text-primary select-all">
+                        {st.password}
+                      </span>
+                    )}
+                    <Button variant="danger" size="xs" onClick={() => { if (window.confirm(`Delete ${st.fullName}? This cannot be undone.`)) deleteStudent(st.id); }}>Delete</Button>
+                  </div>
+
+                  {/* Bonus points with edit/delete */}
+                  {(st.bonusPoints || []).length > 0 && (
+                    <div className="pl-11">
+                      <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Bonus Points</p>
+                      <div className="space-y-1.5">
+                        {[...(st.bonusPoints || [])].sort((a, b) => b.date.localeCompare(a.date)).map(b => (
+                          <div key={b.id}>
+                            {editingBonusId === b.id ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  value={editBonusFields.points}
+                                  onChange={e => setEditBonusFields(f => ({ ...f, points: e.target.value }))}
+                                  className="w-16 text-xs bg-bg-card2 border border-border rounded px-2 py-1 text-primary outline-none focus:border-gold min-h-0"
+                                />
+                                <input
+                                  type="text"
+                                  value={editBonusFields.reason}
+                                  onChange={e => setEditBonusFields(f => ({ ...f, reason: e.target.value }))}
+                                  className="flex-1 text-xs bg-bg-card2 border border-border rounded px-2 py-1 text-primary outline-none focus:border-gold min-h-0"
+                                />
+                                <button
+                                  onClick={() => {
+                                    const pts = parseInt(editBonusFields.points);
+                                    if (isNaN(pts) || pts === 0) return;
+                                    updateBonusPoints(st.id, b.id, { points: pts, reason: editBonusFields.reason });
+                                    setEditingBonusId(null);
+                                  }}
+                                  className="text-xs text-gold font-semibold hover:opacity-75 transition-opacity"
+                                >Save</button>
+                                <button
+                                  onClick={() => setEditingBonusId(null)}
+                                  className="text-xs text-muted hover:text-primary transition-colors"
+                                >✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-xs">
+                                <span className={`font-bold flex-shrink-0 ${b.points >= 0 ? 'text-gold' : 'text-danger'}`}>
+                                  {b.points >= 0 ? '+' : ''}{b.points}
+                                </span>
+                                <span className="text-primary flex-1 min-w-0 truncate">{b.reason}</span>
+                                <span className="text-muted flex-shrink-0">{formatDate(b.date)}</span>
+                                <button
+                                  onClick={() => { setEditingBonusId(b.id); setEditBonusFields({ points: String(b.points), reason: b.reason }); }}
+                                  className="text-xs text-muted hover:text-gold transition-colors flex-shrink-0"
+                                >Edit</button>
+                                <button
+                                  onClick={() => { if (window.confirm('Delete this bonus entry?')) deleteBonusPoints(st.id, b.id); }}
+                                  className="text-xs text-muted hover:text-danger transition-colors flex-shrink-0"
+                                >Del</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
+                    </div>
+                  )}
+
+                  {/* All submissions */}
+                  <div className="pl-11">
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Submissions ({subs.length})</p>
+                    {subs.length > 0 ? (
+                      <div className="space-y-1">
+                        {subs.map(sub => {
+                          const pts = submissionPoints(sub, groupActs);
+                          return (
+                            <div key={sub.date} className="flex items-center gap-2 text-xs text-muted">
+                              <span className="w-24 flex-shrink-0 text-primary">{formatDate(sub.date)}</span>
+                              <span className="text-gold font-semibold">+{pts}</span>
+                              <span>({(sub.completedActivities || []).length} acts)</span>
+                              <Button variant="ghost" size="xs" onClick={() => openEdit(st, sub)}>Edit</Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted">No submissions yet.</p>
+                    )}
+                  </div>
+
+                  {/* Personal tasbihs */}
+                  {(st.personalTasbihs || []).length > 0 && (
+                    <div className="pl-11">
+                      <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-1">Personal Tasbihs</p>
+                      <div className="space-y-1">
+                        {(st.personalTasbihs || []).map(pt => {
+                          const pct = pt.target > 0 ? Math.min(100, Math.round((pt.current / pt.target) * 100)) : 0;
+                          return (
+                            <div key={pt.id} className="flex items-center gap-2 text-xs text-muted">
+                              <span className="text-primary flex-1 min-w-0 truncate">{pt.title}</span>
+                              <span className="text-gold">{pt.current}/{pt.target} ({pct}%)</span>
+                              {pt.resetType !== 'none' && <span className="italic">{pt.resetType}</span>}
+                              <button
+                                onClick={() => { if (window.confirm(`Remove "${pt.title}" from ${st.fullName}?`)) deletePersonalTasbih(st.id, pt.id); }}
+                                className="text-danger hover:text-red-400 transition-colors"
+                              >✕</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
