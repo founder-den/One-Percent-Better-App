@@ -6,7 +6,7 @@ import {
   Modal, Input, ChecklistItem, Alert,
 } from '../../components/ui.jsx';
 import { formatDate, todayString } from '../../services/data.js';
-import { submissionPoints, getStudentTotalPoints } from '../../services/calculations.js';
+import { submissionPoints } from '../../services/calculations.js';
 
 // Days between two YYYY-MM-DD strings (later minus earlier)
 function daysBetween(earlier, later) {
@@ -43,14 +43,37 @@ export default function StudentsTab({ groupId }) {
     updateBonusPoints, deleteBonusPoints,
     addPersonalTasbih, deletePersonalTasbih,
     activitiesForGroup, studentsForGroup,
+    challenges, challengeMemberships,
   } = useApp();
 
   const groupStudents = studentsForGroup(groupId);
   const groupActs     = activitiesForGroup(groupId);
   const today         = todayString();
 
-  // Activity id → name lookup
-  const actMap = Object.fromEntries(groupActs.map(a => [a.id, a.name || a.id]));
+  // Returns the activities array to use for a given submission:
+  // challenge-specific if the submission date falls within a challenge the student joined,
+  // otherwise falls back to the general group activities.
+  function getActivitiesForSub(sub, studentId) {
+    const memberOf = challengeMemberships.filter(m => m.studentId === studentId);
+    for (const membership of memberOf) {
+      const challenge = challenges.find(c => c.id === membership.challengeId);
+      if (!challenge) continue;
+      const { startDate, endDate, activities: challengeActs } = challenge;
+      if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
+        return challengeActs || [];
+      }
+    }
+    return groupActs;
+  }
+
+  // Total points using challenge-aware activity lookup per submission
+  function calcStudentTotalPts(st) {
+    const actPts = (st.submissions || []).reduce((sum, sub) => {
+      return sum + submissionPoints(sub, getActivitiesForSub(sub, st.id));
+    }, 0);
+    const bonus = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
+    return actPts + bonus;
+  }
 
   const pending = groupStudents.filter(s => s.status === 'pending');
   const active  = groupStudents.filter(s => (s.status || 'active') === 'active');
@@ -104,10 +127,11 @@ export default function StudentsTab({ groupId }) {
     const checked = {};
     (sub.completedActivities || []).forEach(id => { checked[id] = true; });
     setEditChecked(checked);
-    setEditModal({ student: st, sub });
+    setEditModal({ student: st, sub, activities: getActivitiesForSub(sub, st.id) });
   }
   function saveEdit() {
-    const ids = groupActs.filter(a => editChecked[a.id]).map(a => a.id);
+    const acts = editModal.activities || groupActs;
+    const ids = acts.filter(a => editChecked[a.id]).map(a => a.id);
     editSubmission(editModal.student.id, editModal.sub.date, ids);
     setEditModal(null);
   }
@@ -218,7 +242,7 @@ export default function StudentsTab({ groupId }) {
         )}
         {active.map(st => {
           const isExpanded    = expandedStudentId === st.id;
-          const totalPts      = getStudentTotalPoints(st, groupActs);
+          const totalPts      = calcStudentTotalPts(st);
           const subs          = [...(st.submissions || [])].sort((a, b) => b.date.localeCompare(a.date));
           const bonusPtsTotal = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
           const streak        = calcStreak(subs, today);
@@ -364,8 +388,10 @@ export default function StudentsTab({ groupId }) {
                           <>
                             <div className="space-y-2">
                               {pagedSubs.map(sub => {
-                                const pts      = submissionPoints(sub, groupActs);
-                                const actNames = (sub.completedActivities || []).map(id => actMap[id] || id);
+                                const subActs   = getActivitiesForSub(sub, st.id);
+                                const subActMap = Object.fromEntries(subActs.map(a => [a.id, a.name || a.id]));
+                                const pts       = submissionPoints(sub, subActs);
+                                const actNames  = (sub.completedActivities || []).map(id => subActMap[id] || id);
                                 return (
                                   <div
                                     key={sub.date}
@@ -593,10 +619,10 @@ export default function StudentsTab({ groupId }) {
       >
         {editModal && (
           <div className="space-y-1">
-            {groupActs.length === 0 && (
-              <p className="text-sm text-muted">No activities found for this group.</p>
+            {(editModal.activities || groupActs).length === 0 && (
+              <p className="text-sm text-muted">No activities found for this submission.</p>
             )}
-            {groupActs.map(a => (
+            {(editModal.activities || groupActs).map(a => (
               <ChecklistItem
                 key={a.id}
                 activity={a}
