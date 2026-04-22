@@ -217,7 +217,7 @@ function PendingScreen({ onLogout }) {
 
 // ─── Main ─────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'home',    label: 'Home' },
+  { key: 'home',    label: 'Dashboard' },
   { key: 'profile', label: 'Profile' },
 ];
 
@@ -244,7 +244,7 @@ export default function StudentPortal() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
-      {activeTab === 'home'    && <HomeTab />}
+      {activeTab === 'home'    && <HomeTab onEditProfile={() => setActiveTab('profile')} />}
       {activeTab === 'profile' && <ProfileTab />}
     </div>
   );

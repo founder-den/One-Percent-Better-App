@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Wrench, BookOpen, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LayoutDashboard, Trophy, Wrench, BookOpen, Sun, Moon, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth }  from '../context/AuthContext.jsx';
 import { useTheme } from '../context/ThemeContext.jsx';
 import { Avatar }   from './ui.jsx';
@@ -22,7 +22,7 @@ export { AppLogo };
 
 // ─── Nav links ────────────────────────────────────────────────────
 const NAV_LINKS = [
-  { to: '/student',   label: 'Home',      Icon: Home     },
+  { to: '/student',   label: 'Dashboard', Icon: LayoutDashboard },
   { to: '/challenge', label: 'Challenge', Icon: Trophy   },
   { to: '/programs',  label: 'Programs',  Icon: BookOpen },
   { to: '/tools',     label: 'Tools',     Icon: Wrench   },
