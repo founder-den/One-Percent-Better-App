@@ -26,6 +26,8 @@ function mapStudent(row, submissions = [], bonusPoints = [], books = [], program
     tasbih:                 row.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personalTasbihProgress: row.personal_tasbih_progress || {},
     personalTasbihs:        row.personal_tasbihs || [],
+    telegramUsername:       row.telegram_username || '',
+    preferredLanguage:      row.preferred_language || 'en',
     submissions,
     bonusPoints,
     books,
@@ -513,6 +515,8 @@ export async function dbUpdateStudent(id, fields) {
   if (fields.university        !== undefined) row.university          = fields.university;
   if (fields.phone             !== undefined) row.phone               = fields.phone;
   if (fields.avatar            !== undefined) row.avatar              = fields.avatar;
+  if (fields.telegramUsername  !== undefined) row.telegram_username   = fields.telegramUsername;
+  if (fields.preferredLanguage !== undefined) row.preferred_language  = fields.preferredLanguage;
 
   if (Object.keys(row).length === 0) return true;
 

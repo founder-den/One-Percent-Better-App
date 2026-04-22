@@ -307,6 +307,13 @@ export default function StudentsTab({ groupId }) {
                             Status:{' '}
                             <span className="text-primary capitalize">{st.status || 'active'}</span>
                           </p>
+                          <p className="text-xs text-muted">
+                            ✈️ Telegram:{' '}
+                            {st.telegramUsername
+                              ? <span className="text-primary font-medium">{st.telegramUsername} ✅</span>
+                              : <span className="opacity-50">No Telegram connected</span>
+                            }
+                          </p>
                         </div>
 
                         {/* Quick stats */}

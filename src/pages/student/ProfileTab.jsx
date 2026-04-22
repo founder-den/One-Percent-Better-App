@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import {
   Card, Button, Input, SectionHeading, Alert, PasswordInput,
 } from '../../components/ui.jsx';
-import { Camera, Check, X } from 'lucide-react';
+import { Camera, Check, X, Info } from 'lucide-react';
 
 // ─── Avatar upload with camera overlay ────────────────────────────
 function AvatarUpload({ avatar, name, onChange }) {
@@ -50,9 +50,11 @@ export default function ProfileTab() {
 
   // Edit form state
   const [form, setForm] = useState({
-    fullName:   student.fullName   || '',
-    university: student.university || '',
-    phone:      student.phone      || '',
+    fullName:         student.fullName         || '',
+    university:       student.university       || '',
+    phone:            student.phone            || '',
+    telegramUsername: student.telegramUsername || '',
+    preferredLanguage: student.preferredLanguage || 'en',
   });
   const [avatar, setAvatar] = useState(student.avatar || null);
   const [saved,  setSaved]  = useState(false);
@@ -72,9 +74,11 @@ export default function ProfileTab() {
     setErr(''); setSaved(false);
     if (!form.fullName.trim()) { setErr('Full name is required.'); return; }
     const ok = await updateStudent(student.id, {
-      fullName:   form.fullName.trim(),
-      university: form.university.trim(),
-      phone:      form.phone.trim(),
+      fullName:         form.fullName.trim(),
+      university:       form.university.trim(),
+      phone:            form.phone.trim(),
+      telegramUsername: form.telegramUsername.trim(),
+      preferredLanguage: form.preferredLanguage,
       avatar,
     });
     if (ok) setSaved(true);
@@ -82,7 +86,7 @@ export default function ProfileTab() {
   }
 
   function handleCancel() {
-    setForm({ fullName: student.fullName || '', university: student.university || '', phone: student.phone || '' });
+    setForm({ fullName: student.fullName || '', university: student.university || '', phone: student.phone || '', telegramUsername: student.telegramUsername || '', preferredLanguage: student.preferredLanguage || 'en' });
     setAvatar(student.avatar || null);
     setSaved(false); setErr('');
   }
@@ -169,6 +173,46 @@ export default function ProfileTab() {
             placeholder="e.g. +1 617 555 0100"
             type="tel"
           />
+          <Input
+            label="Telegram Username"
+            value={form.telegramUsername}
+            onChange={set('telegramUsername')}
+            placeholder="@yourusername"
+          />
+          <p className="text-xs text-muted -mt-3 mb-4 opacity-70">
+            Add your Telegram username so we can send you daily reminders
+          </p>
+          <div className="mb-4">
+            <label className="block text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
+              Preferred Language
+            </label>
+            <select
+              value={form.preferredLanguage}
+              onChange={e => { setForm(f => ({ ...f, preferredLanguage: e.target.value })); setSaved(false); }}
+              className="w-full bg-surface border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            >
+              <option value="en">English 🇬🇧</option>
+              <option value="ru">Русский 🇷🇺</option>
+              <option value="ky">Кыргызча 🇰🇬</option>
+            </select>
+          </div>
+
+          {/* Telegram setup instructions */}
+          <div
+            className="rounded-xl p-3.5 mb-4 flex gap-3"
+            style={{ background: 'var(--gold-subtle)', border: '1px solid color-mix(in srgb, var(--gold) 30%, transparent)' }}
+          >
+            <Info size={16} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--gold)' }} />
+            <div className="space-y-1 text-xs" style={{ color: 'var(--text)' }}>
+              <p className="font-semibold" style={{ color: 'var(--gold)' }}>How to enable Telegram reminders:</p>
+              <p>1. Search <span className="font-mono font-semibold">@KCC_students_Bot</span> in Telegram</p>
+              <p>2. Press <strong>Start</strong> to activate the bot</p>
+              <p>3. Enter your Telegram username above (e.g. @yourname)</p>
+              <p>4. Save your profile</p>
+              <p className="text-muted mt-1 italic">You must start the bot before reminders can be sent to you</p>
+            </div>
+          </div>
+
           <div className="flex gap-2 mt-2">
             <Button type="submit" className="flex-1 gap-1.5">
               <Check size={14} /> Save Changes
