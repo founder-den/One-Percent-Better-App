@@ -365,8 +365,41 @@ function InlineAvatar({ src, name, size = 48 }) {
 }
 
 // ─── Public profile modal ──────────────────────────────────────────
-function PublicProfileModal({ s, activities, allStudents, groupActivities, groupPeriods, findGroupById, onClose }) {
-  const totalPoints   = useMemo(() => getStudentTotalPoints(s, activities), [s, activities]);
+function PublicProfileModal({ s, activities, allStudents, groupActivities, groupPeriods, findGroupById, challenges, challengeMemberships, onClose }) {
+  // Returns the activities array to use for a given submission:
+  // challenge-specific if the submission date falls within a challenge the student joined,
+  // otherwise falls back to the general group activities.
+  function getActivitiesForSub(sub) {
+    const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
+    for (const membership of memberOf) {
+      const challenge = challenges.find(c => c.id === membership.challengeId);
+      if (!challenge) continue;
+      const { startDate, endDate, activities: challengeActs } = challenge;
+      if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
+        return challengeActs || [];
+      }
+    }
+    return activities;
+  }
+
+  const totalPoints   = useMemo(() => {
+    const actPts = (s.submissions || []).reduce((sum, sub) => {
+      const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
+      let subActs = activities;
+      for (const membership of memberOf) {
+        const challenge = challenges.find(c => c.id === membership.challengeId);
+        if (!challenge) continue;
+        const { startDate, endDate, activities: challengeActs } = challenge;
+        if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
+          subActs = challengeActs || [];
+          break;
+        }
+      }
+      return sum + submissionPoints(sub, subActs);
+    }, 0);
+    const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + (b.points || 0), 0);
+    return actPts + bonus;
+  }, [s, activities, challenges, challengeMemberships]);
   const currentStreak = useMemo(() => getStudentStreak(s), [s]);
   const activeDays    = useMemo(() => getStudentActiveDays(s), [s]);
   const bestStreak    = useMemo(() => calcBestStreak(s), [s]);
@@ -464,7 +497,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
               {recentSubs.map(sub => (
                 <div key={sub.date} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(sub.date)}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{submissionPoints(sub, activities)}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{submissionPoints(sub, getActivitiesForSub(sub))}</span>
                 </div>
               ))}
             </div>
@@ -885,6 +918,8 @@ export default function HomeTab({ onEditProfile }) {
           groupActivities={groupActivities}
           groupPeriods={groupPeriods}
           findGroupById={findGroupById}
+          challenges={challenges}
+          challengeMemberships={challengeMemberships}
           onClose={() => setModalStudent(null)}
         />
       )}
