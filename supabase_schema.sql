@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS submissions (
 ALTER TABLE submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_all" ON submissions;
 CREATE POLICY "anon_all" ON submissions FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "submissions_read" ON submissions FOR SELECT USING (true);
+CREATE POLICY "submissions_write" ON submissions FOR ALL USING (auth.uid()::text = student_id) WITH CHECK (auth.uid()::text = student_id);
 
 
 -- ─── bonus_points ─────────────────────────────────────────────────
@@ -82,6 +84,8 @@ CREATE TABLE IF NOT EXISTS bonus_points (
 ALTER TABLE bonus_points ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_all" ON bonus_points;
 CREATE POLICY "anon_all" ON bonus_points FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "bonus_points_read" ON bonus_points FOR SELECT USING (true);
+CREATE POLICY "bonus_points_write" ON bonus_points FOR ALL USING (auth.uid()::text = student_id) WITH CHECK (auth.uid()::text = student_id);
 
 
 -- ─── global_tasbihs ──────────────────────────────────────────────
@@ -132,6 +136,8 @@ CREATE TABLE IF NOT EXISTS books (
 ALTER TABLE books ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_all" ON books;
 CREATE POLICY "anon_all" ON books FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "books_read" ON books FOR SELECT USING (true);
+CREATE POLICY "books_write" ON books FOR ALL USING (auth.uid()::text = student_id) WITH CHECK (auth.uid()::text = student_id);
 
 
 -- ─── programs ────────────────────────────────────────────────────
@@ -164,6 +170,8 @@ CREATE TABLE IF NOT EXISTS program_completions (
 ALTER TABLE program_completions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_all" ON program_completions;
 CREATE POLICY "anon_all" ON program_completions FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "program_completions_read" ON program_completions FOR SELECT USING (true);
+CREATE POLICY "program_completions_write" ON program_completions FOR ALL USING (auth.uid()::text = student_id) WITH CHECK (auth.uid()::text = student_id);
 
 
 -- ─── collective_task_counts ──────────────────────────────────────
@@ -254,6 +262,8 @@ DROP POLICY IF EXISTS "anon_all" ON challenge_memberships;
 
 CREATE POLICY "anon_all" ON challenges            FOR ALL TO anon USING (true) WITH CHECK (true);
 CREATE POLICY "anon_all" ON challenge_memberships FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "challenge_memberships_read" ON challenge_memberships FOR SELECT USING (true);
+CREATE POLICY "challenge_memberships_write" ON challenge_memberships FOR ALL USING (auth.uid()::text = student_id) WITH CHECK (auth.uid()::text = student_id);
 
 GRANT ALL ON challenges            TO anon;
 GRANT ALL ON challenge_memberships TO anon;
@@ -284,3 +294,10 @@ ALTER TABLE submissions ADD COLUMN IF NOT EXISTS score_override numeric DEFAULT 
 -- CROSS JOIN challenges
 -- WHERE challenges.name = 'Ramadan Challenge'
 -- ON CONFLICT DO NOTHING;
+
+
+-- ─── Secure Students Table ─────────────────────────────────────────
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all" ON students;
+CREATE POLICY "students_read" ON students FOR SELECT USING (true);
+CREATE POLICY "students_write" ON students FOR ALL USING (auth.uid()::text = id) WITH CHECK (auth.uid()::text = id);
