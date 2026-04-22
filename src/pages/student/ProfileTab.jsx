@@ -5,6 +5,7 @@ import {
   Card, Button, Input, SectionHeading, Alert, PasswordInput,
 } from '../../components/ui.jsx';
 import { Camera, Check, X, Info } from 'lucide-react';
+import { supabase } from '../../services/supabase.js';
 
 // ─── Avatar upload with camera overlay ────────────────────────────
 function AvatarUpload({ avatar, name, onChange }) {
@@ -99,12 +100,12 @@ export default function ProfileTab() {
   async function handleChangePassword(e) {
     e.preventDefault();
     setPwErr(''); setPwOk('');
-    if (pwForm.current !== student.password) { setPwErr('Current password is incorrect.'); return; }
     if (pwForm.newPw.length < 4) { setPwErr('New password must be at least 4 characters.'); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwErr('Passwords do not match.'); return; }
-    const ok = await updateStudent(student.id, { password: pwForm.newPw });
-    if (ok) { setPwForm({ current: '', newPw: '', confirm: '' }); setPwOk('Password changed successfully.'); }
-    else setPwErr('Failed to update password. Please try again.');
+
+    const { error } = await supabase.auth.updateUser({ password: pwForm.newPw });
+    if (!error) { setPwForm({ current: '', newPw: '', confirm: '' }); setPwOk('Password changed successfully.'); }
+    else setPwErr('Failed to update password. Make sure you are logged in securely.');
   }
 
   return (

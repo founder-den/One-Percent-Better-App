@@ -130,7 +130,7 @@ function checkDedicated(subs, groupActivities) {
   return subs.some(s => (s.completedActivities || []).length >= groupActivities.length);
 }
 
-function computeEarnedBadges(student, activities, allStudents, groupActivities, groupPeriods) {
+function computeEarnedBadges(student, activities, allStudents, groupActivities, groupPeriods, studentRanks = null) {
   const subs        = student.submissions || [];
   const totalPoints = getStudentTotalPoints(student, activities);
   const bestStreak  = calcBestStreak(student);
@@ -141,10 +141,15 @@ function computeEarnedBadges(student, activities, allStudents, groupActivities, 
   const readCount   = subs.reduce((n, s) => n + (s.completedActivities || []).filter(id => readIds.includes(id)).length, 0);
   const tahCount    = subs.reduce((n, s) => n + (s.completedActivities || []).filter(id => tahIds.includes(id)).length, 0);
 
-  const sorted  = [...allStudents]
-    .filter(s => (s.status || 'active') === 'active')
-    .sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities));
-  const myRank  = sorted.findIndex(s => s.id === student.id) + 1;
+  let myRank = 0;
+  if (studentRanks) {
+    myRank = studentRanks[student.id] || 0;
+  } else {
+    const sorted  = [...allStudents]
+      .filter(s => (s.status || 'active') === 'active')
+      .sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities));
+    myRank  = sorted.findIndex(s => s.id === student.id) + 1;
+  }
 
   const earned = new Set();
   if (subs.length > 0)            earned.add('first_step');
@@ -686,9 +691,15 @@ export default function HomeTab({ onEditProfile }) {
 
   // ── Per-student earned badges (for rarity + community cards) ────
   const allStudentBadges = useMemo(() => {
+    const sorted = [...students]
+      .filter(s => (s.status || 'active') === 'active')
+      .sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities));
+    const ranks = {};
+    sorted.forEach((s, i) => { ranks[s.id] = i + 1; });
+
     const map = {};
     groupStudents.forEach(s => {
-      map[s.id] = computeEarnedBadges(s, activities, students, groupActivities, groupPeriods);
+      map[s.id] = computeEarnedBadges(s, activities, students, groupActivities, groupPeriods, ranks);
     });
     return map;
   }, [groupStudents, activities, students, groupActivities, groupPeriods]);

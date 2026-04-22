@@ -16,7 +16,6 @@ function mapStudent(row, submissions = [], bonusPoints = [], books = [], program
     id:                     row.id,
     fullName:               row.full_name || '',
     username:               row.username,
-    password:               row.password,
     groupId:                row.group_id,
     secondaryGroupIds:      row.secondary_group_ids || [],
     status:                 row.status,
@@ -282,11 +281,35 @@ export async function loadAll() {
     if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
+  const subsByStudent = {};
+  (submissionRows || []).forEach(r => {
+    if (!subsByStudent[r.student_id]) subsByStudent[r.student_id] = [];
+    subsByStudent[r.student_id].push(mapSubmission(r));
+  });
+
+  const bonusByStudent = {};
+  (bonusRows || []).forEach(r => {
+    if (!bonusByStudent[r.student_id]) bonusByStudent[r.student_id] = [];
+    bonusByStudent[r.student_id].push(mapBonusPoint(r));
+  });
+
+  const booksByStudent = {};
+  (bookRows || []).forEach(r => {
+    if (!booksByStudent[r.student_id]) booksByStudent[r.student_id] = [];
+    booksByStudent[r.student_id].push(mapBook(r));
+  });
+
+  const compsByStudent = {};
+  (completionRows || []).forEach(r => {
+    if (!compsByStudent[r.student_id]) compsByStudent[r.student_id] = [];
+    compsByStudent[r.student_id].push(mapProgramCompletion(r));
+  });
+
   const students = (studentRows || []).map(row => {
-    const subs  = (submissionRows  || []).filter(r => r.student_id === row.id).map(mapSubmission);
-    const bonus = (bonusRows       || []).filter(r => r.student_id === row.id).map(mapBonusPoint);
-    const books = (bookRows        || []).filter(r => r.student_id === row.id).map(mapBook);
-    const comps = (completionRows  || []).filter(r => r.student_id === row.id).map(mapProgramCompletion);
+    const subs  = subsByStudent[row.id] || [];
+    const bonus = bonusByStudent[row.id] || [];
+    const books = booksByStudent[row.id] || [];
+    const comps = compsByStudent[row.id] || [];
     return mapStudent(row, subs, bonus, books, comps);
   });
 
@@ -478,11 +501,23 @@ export async function dbActivatePeriod(id, groupId) {
 export async function dbRegisterStudent(student) {
   console.log('[db] registerStudent:', student.username, '— inserting into Supabase');
 
+  // 1. Register securely with Supabase Auth using a generated hidden email
+  const email = `${student.username.toLowerCase().replace(/\s+/g, '')}@1percentbetter.app`;
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email,
+    password: student.password,
+  });
+
+  if (authError) {
+    console.error('[db] registerStudent Auth FAILED:', authError);
+    return null;
+  }
+
+  // 2. Insert the student data using the new secure Auth UUID
   const { error } = await supabase.from('students').insert({
-    id:                       student.id,
+    id:                       authData.user.id,
     full_name:                student.fullName,
     username:                 student.username,
-    password:                 student.password,
     group_id:                 student.groupId,
     secondary_group_ids:      student.secondaryGroupIds || [],
     status:                   student.status,
@@ -508,7 +543,6 @@ export async function dbUpdateStudent(id, fields) {
   const row = {};
   if (fields.fullName          !== undefined) row.full_name           = fields.fullName;
   if (fields.username          !== undefined) row.username            = fields.username;
-  if (fields.password          !== undefined) row.password            = fields.password;
   if (fields.groupId           !== undefined) row.group_id            = fields.groupId;
   if (fields.secondaryGroupIds !== undefined) row.secondary_group_ids = fields.secondaryGroupIds;
   if (fields.status            !== undefined) row.status              = fields.status;

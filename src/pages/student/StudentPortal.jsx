@@ -5,6 +5,7 @@ import { useApp }  from '../../context/AppContext.jsx';
 import { Alert, Button, Input, PasswordInput, Tabs } from '../../components/ui.jsx';
 import { AppLogo } from '../../components/Navbar.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
+import { dbRegisterStudent } from '../../services/db.js';
 import HomeTab    from './HomeTab.jsx';
 import ProfileTab from './ProfileTab.jsx';
 
@@ -38,22 +39,25 @@ function LoginForm({ onShowRegister }) {
   const [error, setError]  = useState('');
   const [loading, setLoading] = useState(false);
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     setError('');
     if (!username.trim() || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
-    setTimeout(() => {
-      // Silent admin check — no visible difference to the user
-      if (username.trim() === adminUsername && password === adminPassword) {
-        loginAdmin();
-        navigate('/admin', { replace: true });
-        return;
-      }
-      const found = students.find(s => s.username === username.trim() && s.password === password);
-      if (!found) { setError('Incorrect username or password.'); setLoading(false); return; }
-      loginStudent(found);
-    }, 80);
+
+    // Silent admin check — no visible difference to the user
+    if (username.trim() === adminUsername && password === adminPassword) {
+      loginAdmin();
+      navigate('/admin', { replace: true });
+      return;
+    }
+
+    try {
+      await loginStudent(username.trim(), password);
+    } catch (err) {
+      setError('Incorrect username or password.');
+      setLoading(false);
+    }
   }
 
   return (
@@ -131,11 +135,16 @@ function RegisterForm({ onShowLogin }) {
     if (!grp.isActive) { setErrors({ code: 'Group not accepting registrations' }); return; }
 
     setLoading(true);
-    setTimeout(() => {
-      const status     = registrationMode === 'approval' ? 'pending' : 'active';
-      const newStudent = registerStudent(form, grp.id, status);
-      loginStudent(newStudent);
-    }, 80);
+
+    const status = registrationMode === 'approval' ? 'pending' : 'active';
+    const newStudent = await dbRegisterStudent({ ...form, groupId: grp.id, status });
+
+    if (newStudent) {
+      window.location.reload(); // Quick refresh so AuthContext grabs the new session + students array
+    } else {
+      setErrors({ code: 'Registration failed. Username might be taken.' });
+      setLoading(false);
+    }
   }
 
   const codeHintColor = codeHint.startsWith('✓') ? 'text-ok' : 'text-danger';
