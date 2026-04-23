@@ -61,7 +61,7 @@ function bonusBetween(student, start, end) {
 // ─── Grand total: all challenge submissions + bonus points ────────────
 export function getStudentGrandTotal(student, submissions, challenges) {
   const subPts = (submissions || []).reduce((sum, sub) => {
-    const ch = (challenges || []).find(c => c.id === sub.challengeId);
+    const ch = (challenges || []).find(c => sub.date >= c.startDate && sub.date <= c.endDate);
     if (!ch) return sum;
     const chPts = (sub.completedActivities || []).reduce((s, actId) => {
       const act = (ch.activities || []).find(a => a.id === actId);

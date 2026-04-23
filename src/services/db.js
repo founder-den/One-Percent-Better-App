@@ -568,9 +568,8 @@ export async function dbDeleteStudent(id) {
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, challengeId) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote) {
   console.log('[db] submitDay:', studentId, dateStr);
-  challengeId = challengeId ?? null;
   const { data: existing } = await supabase
     .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
   if (existing) { console.log('[db] submitDay — already submitted, skipping'); return true; }
@@ -582,7 +581,6 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     completed_activities: completedActivities,
     quote:                quote || '',
     quote_likes:          [],
-    challenge_id:         challengeId,
   });
   if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
   return true;
