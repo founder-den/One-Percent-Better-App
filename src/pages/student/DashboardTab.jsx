@@ -121,7 +121,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const updated = submitDay(student.id, dateStr, ids, quote.trim());
+    const updated = submitDay(student.id, dateStr, ids, quote.trim(), isChallenge ? challenge.id : null);
     if (!updated) { setErr('Already submitted for this day.'); return; }
     refreshStudent(updated);
     setChecked({});

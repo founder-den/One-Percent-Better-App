@@ -40,6 +40,7 @@ function mapSubmission(row) {
     completedActivities: row.completed_activities || [],
     quote:               row.quote || '',
     quoteLikes:          row.quote_likes || [],
+    challengeId:         row.challenge_id || null,
     ...(typeof row.score_override === 'number' ? { scoreOverride: row.score_override } : {}),
   };
 }

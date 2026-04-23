@@ -5,7 +5,7 @@ import { useApp }  from '../../context/AppContext.jsx';
 import { Card, SectionHeading, EmptyState } from '../../components/ui.jsx';
 import { formatDate, todayString, parseLocalDate, dateToStr } from '../../services/data.js';
 import {
-  getStudentTotalPoints, getStudentStreak, getStudentActiveDays, submissionPoints,
+  getStudentTotalPoints, getStudentGrandTotal, getStudentStreak, getStudentActiveDays, submissionPoints,
 } from '../../services/calculations.js';
 import {
   Pencil, Flame, Star, CalendarDays, Trophy, Lock,
@@ -375,6 +375,11 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
   // challenge-specific if the submission date falls within a challenge the student joined,
   // otherwise falls back to the general group activities.
   function getActivitiesForSub(sub) {
+    if (sub.challengeId) {
+      const ch = challenges.find(c => c.id === sub.challengeId);
+      if (ch) return ch.activities || [];
+    }
+    // date-range fallback for submissions without challengeId
     const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
     for (const membership of memberOf) {
       const challenge = challenges.find(c => c.id === membership.challengeId);
@@ -387,24 +392,21 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     return activities;
   }
 
-  const totalPoints   = useMemo(() => {
-    const actPts = (s.submissions || []).reduce((sum, sub) => {
-      const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
-      let subActs = activities;
-      for (const membership of memberOf) {
-        const challenge = challenges.find(c => c.id === membership.challengeId);
-        if (!challenge) continue;
-        const { startDate, endDate, activities: challengeActs } = challenge;
-        if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
-          subActs = challengeActs || [];
-          break;
-        }
-      }
-      return sum + submissionPoints(sub, subActs);
-    }, 0);
-    const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + (b.points || 0), 0);
-    return actPts + bonus;
-  }, [s, activities, challenges, challengeMemberships]);
+  const totalPoints = useMemo(() => getStudentGrandTotal(s, challenges, activities), [s, challenges, activities]);
+
+  const pointsBreakdown = useMemo(() => {
+    const myMemberships = challengeMemberships.filter(m => m.studentId === s.id);
+    const rows = myMemberships.map(m => {
+      const ch = challenges.find(c => c.id === m.challengeId);
+      if (!ch) return null;
+      const subs = (s.submissions || []).filter(sub => sub.challengeId === ch.id);
+      const pts = subs.reduce((sum, sub) => sum + Number(submissionPoints(sub, ch.activities || []) || 0), 0);
+      return { label: ch.name, pts };
+    }).filter(Boolean);
+    const bonusPts = (s.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
+    const total = rows.reduce((sum, r) => sum + r.pts, 0) + bonusPts;
+    return { rows, bonusPts, total };
+  }, [s, challenges, challengeMemberships]);
   const currentStreak = useMemo(() => getStudentStreak(s), [s]);
   const activeDays    = useMemo(() => getStudentActiveDays(s), [s]);
   const bestStreak    = useMemo(() => calcBestStreak(s), [s]);
@@ -472,6 +474,29 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
           ))}
         </div>
 
+        {/* Points Breakdown */}
+        {(pointsBreakdown.rows.length > 0 || pointsBreakdown.bonusPts > 0) && (
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '10px' }}>POINTS BREAKDOWN</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {pointsBreakdown.rows.map((row, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{row.label}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{row.pts} pts</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Bonus Points</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{pointsBreakdown.bonusPts} pts</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-card2)', border: '1px solid var(--gold)', borderRadius: '8px', marginTop: '2px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>Total</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.total} pts</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Calendar */}
         <div style={{ marginBottom: '20px' }}>
           <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '10px' }}>ACTIVITY</p>
@@ -514,8 +539,8 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 }
 
 // ─── Community student card ────────────────────────────────────────
-function CommunityStudentCard({ s, earnedBadges, activities, onClick }) {
-  const totalPoints   = getStudentTotalPoints(s, activities);
+function CommunityStudentCard({ s, earnedBadges, activities, challenges, onClick }) {
+  const totalPoints   = getStudentGrandTotal(s, challenges, activities);
   const currentStreak = getStudentStreak(s);
   const topBadges     = BADGE_DEFS.filter(d => earnedBadges.has(d.id)).slice(0, 2);
   const [hovered, setHovered] = useState(false);
@@ -693,7 +718,7 @@ export default function HomeTab({ onEditProfile }) {
   const allStudentBadges = useMemo(() => {
     const sorted = [...students]
       .filter(s => (s.status || 'active') === 'active')
-      .sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities));
+      .sort((a, b) => getStudentGrandTotal(b, challenges, activities) - getStudentGrandTotal(a, challenges, activities));
     const ranks = {};
     sorted.forEach((s, i) => { ranks[s.id] = i + 1; });
 
@@ -702,7 +727,7 @@ export default function HomeTab({ onEditProfile }) {
       map[s.id] = computeEarnedBadges(s, activities, students, groupActivities, groupPeriods, ranks);
     });
     return map;
-  }, [groupStudents, activities, students, groupActivities, groupPeriods]);
+  }, [groupStudents, activities, students, groupActivities, groupPeriods, challenges]);
 
   // Badge rarity: how many group students earned each badge
   const badgeCounts = useMemo(() => {
@@ -740,8 +765,8 @@ export default function HomeTab({ onEditProfile }) {
 
   // ── Community students (same group, sorted by points) ───────────
   const communityStudents = useMemo(
-    () => [...groupStudents].sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities)),
-    [groupStudents, activities]
+    () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, challenges, activities) - getStudentGrandTotal(a, challenges, activities)),
+    [groupStudents, activities, challenges]
   );
 
   function handleDismiss(id) {
@@ -913,6 +938,7 @@ export default function HomeTab({ onEditProfile }) {
                 s={s}
                 earnedBadges={allStudentBadges[s.id] || new Set()}
                 activities={activities}
+                challenges={challenges}
                 onClick={() => setModalStudent(s)}
               />
             ))}

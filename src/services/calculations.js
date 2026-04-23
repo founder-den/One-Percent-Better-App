@@ -39,23 +39,37 @@ export function checkAndResetTasbih(resetType, lastResetDate) {
 // ─── Points map ───────────────────────────────────────────────────
 function pointsMap(activities) {
   const map = {};
-  activities.forEach(a => { map[a.id] = a.points || 0; });
+  activities.forEach(a => { map[a.id] = Number(a.points || 0); });
   return map;
 }
 
 function subPoints(sub, map) {
   if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
-  return (sub.completedActivities || []).reduce((sum, id) => sum + (map[id] || 0), 0);
+  return (sub.completedActivities || []).reduce((sum, id) => sum + Number(map[id] || 0), 0);
 }
 
 function bonusTotal(student) {
-  return (student.bonusPoints || []).reduce((sum, b) => sum + (b.points || 0), 0);
+  return (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
 }
 
 function bonusBetween(student, start, end) {
   return (student.bonusPoints || [])
     .filter(b => b.date >= start && b.date <= end)
-    .reduce((sum, b) => sum + (b.points || 0), 0);
+    .reduce((sum, b) => sum + Number(b.points || 0), 0);
+}
+
+// ─── Grand total: all submissions (challenge-aware) + bonus points ──
+export function getStudentGrandTotal(student, challenges, fallbackActivities) {
+  const subPts = (student.submissions || []).reduce((sum, sub) => {
+    let acts = fallbackActivities;
+    if (sub.challengeId) {
+      const ch = (challenges || []).find(c => c.id === sub.challengeId);
+      if (ch) acts = ch.activities || [];
+    }
+    return sum + Number(subPoints(sub, pointsMap(acts)) || 0);
+  }, 0);
+  const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
+  return subPts + bonusPts;
 }
 
 // ─── Total points across ALL submissions + bonus ───────────────────
