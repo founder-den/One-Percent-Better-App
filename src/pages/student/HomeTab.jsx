@@ -375,11 +375,6 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
   // challenge-specific if the submission date falls within a challenge the student joined,
   // otherwise falls back to the general group activities.
   function getActivitiesForSub(sub) {
-    if (sub.challengeId) {
-      const ch = challenges.find(c => c.id === sub.challengeId);
-      if (ch) return ch.activities || [];
-    }
-    // date-range fallback for submissions without challengeId
     const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
     for (const membership of memberOf) {
       const challenge = challenges.find(c => c.id === membership.challengeId);
@@ -399,7 +394,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     const rows = myMemberships.map(m => {
       const ch = challenges.find(c => c.id === m.challengeId);
       if (!ch) return null;
-      const subs = (s.submissions || []).filter(sub => sub.challengeId === ch.id);
+      const subs = (s.submissions || []).filter(sub => sub.date >= ch.startDate && sub.date <= ch.endDate);
       const pts = subs.reduce((sum, sub) => sum + Number(submissionPoints(sub, ch.activities || []) || 0), 0);
       return { label: ch.name, pts };
     }).filter(Boolean);

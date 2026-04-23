@@ -78,10 +78,8 @@ export default function DashboardTab({ challenge, memberStudents }) {
     : studentsForGroup(student.groupId);
 
   const existingSub = useMemo(
-    () => isChallenge
-      ? (student.submissions || []).find(s => s.date === dateStr && s.challengeId === challenge.id)
-      : (student.submissions || []).find(s => s.date === dateStr && !s.challengeId),
-    [student, dateStr, isChallenge, challenge?.id]
+    () => (student.submissions || []).find(s => s.date === dateStr),
+    [student, dateStr]
   );
   const alreadySubmitted = !!existingSub;
 
@@ -123,7 +121,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const updated = submitDay(student.id, dateStr, ids, quote.trim(), isChallenge ? challenge.id : null);
+    const updated = submitDay(student.id, dateStr, ids, quote.trim());
     if (!updated) { setErr('Already submitted for this day.'); return; }
     refreshStudent(updated);
     setChecked({});
