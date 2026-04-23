@@ -229,6 +229,15 @@ export async function dbLoadGroups() {
   }
 }
 
+export async function dbValidateGroupCode(code) {
+  const { data } = await supabase
+    .from('groups')
+    .select('id, name, is_active')
+    .ilike('group_code', code.trim())
+    .maybeSingle();
+  return data ? { id: data.id, name: data.name, isActive: data.is_active } : null;
+}
+
 // ─── loadAll ──────────────────────────────────────────────────────
 export async function loadAll() {
   console.log('[db] loadAll — loading all app data from Supabase…');

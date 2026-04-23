@@ -5,7 +5,7 @@ import { useApp }  from '../../context/AppContext.jsx';
 import { Alert, Button, Input, PasswordInput, Tabs } from '../../components/ui.jsx';
 import { AppLogo } from '../../components/Navbar.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
-import { dbRegisterStudent } from '../../services/db.js';
+import { dbRegisterStudent, dbValidateGroupCode } from '../../services/db.js';
 import HomeTab    from './HomeTab.jsx';
 import ProfileTab from './ProfileTab.jsx';
 
@@ -130,11 +130,11 @@ function RegisterForm({ onShowLogin }) {
     const taken = students.some(s => s.username.toLowerCase() === form.username.toLowerCase());
     if (taken) { setErrors({ username: 'Username already taken' }); return; }
 
-    const grp = findGroupByCode(form.code);
-    if (!grp)          { setErrors({ code: 'Invalid group code' }); return; }
-    if (!grp.isActive) { setErrors({ code: 'Group not accepting registrations' }); return; }
-
     setLoading(true);
+
+    const grp = await dbValidateGroupCode(form.code.trim());
+    if (!grp)          { setErrors({ code: 'Invalid group code' }); setLoading(false); return; }
+    if (!grp.isActive) { setErrors({ code: 'Group not accepting registrations' }); setLoading(false); return; }
 
     const status = registrationMode === 'approval' ? 'pending' : 'active';
     const newStudent = await dbRegisterStudent({ ...form, groupId: grp.id, status });
