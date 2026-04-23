@@ -40,7 +40,15 @@ const BADGE_DEFS = [
 
 // ─── Points logic specific to Challenges ───────────────────────────
 function getStudentChallengePoints(student, challengeId, defaultActivities, allChallenges) {
-  if (challengeId === 'all') return Number(getStudentTotalPoints(student, defaultActivities) || 0);
+  if (challengeId === 'all') {
+    let allPts = 0;
+    (student.submissions || []).forEach(s => {
+      const acts = s.challengeId ? (allChallenges.find(c => c.id === s.challengeId)?.activities || defaultActivities) : defaultActivities;
+      allPts += Number(submissionPoints(s, acts) || 0);
+    });
+    allPts += (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
+    return allPts;
+  }
   
   let pts = 0;
   if (challengeId === 'legacy') {

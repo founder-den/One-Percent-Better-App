@@ -86,8 +86,8 @@ export default function DashboardTab({ challenge, memberStudents }) {
   // ── Stats ──────────────────────────────────────────────────────
   // In challenge mode: total = points within challenge date range using challenge activities
   const totalPts = isChallenge
-    ? (student.submissions || []).filter(s => s.challengeId === challenge.id).reduce((sum, s) => sum + Number(submissionPoints(s, allActivities) || 0), 0) +
-      (student.bonusPoints || []).filter(b => b.challengeId === challenge.id).reduce((sum, b) => sum + Number(b.points || 0), 0)
+    ? Number((student.submissions || []).filter(s => s.challengeId === challenge.id).reduce((sum, s) => sum + Number(submissionPoints(s, allActivities) || 0), 0)) +
+      Number((student.bonusPoints || []).filter(b => b.challengeId === challenge.id).reduce((sum, b) => sum + Number(b.points || 0), 0))
     : Number(getStudentTotalPoints(student, allActivities) || 0);
 
   const periodPts = period
