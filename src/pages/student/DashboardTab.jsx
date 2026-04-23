@@ -78,8 +78,10 @@ export default function DashboardTab({ challenge, memberStudents }) {
     : studentsForGroup(student.groupId);
 
   const existingSub = useMemo(
-    () => (student.submissions || []).find(s => s.date === dateStr),
-    [student, dateStr]
+    () => isChallenge
+      ? (student.submissions || []).find(s => s.date === dateStr && s.challengeId === challenge.id)
+      : (student.submissions || []).find(s => s.date === dateStr && !s.challengeId),
+    [student, dateStr, isChallenge, challenge?.id]
   );
   const alreadySubmitted = !!existingSub;
 

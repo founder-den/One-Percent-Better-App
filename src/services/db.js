@@ -568,20 +568,24 @@ export async function dbDeleteStudent(id) {
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export async function dbSubmitDay(studentId, dateStr, completedActivities, quote) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, challengeId) {
   console.log('[db] submitDay:', studentId, dateStr);
-  const { data: existing } = await supabase
-    .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
+  let dupQuery = supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr);
+  if (challengeId) dupQuery = dupQuery.eq('challenge_id', challengeId);
+  const { data: existing } = await dupQuery.maybeSingle();
   if (existing) { console.log('[db] submitDay — already submitted, skipping'); return true; }
 
-  const { error } = await supabase.from('submissions').insert({
+  const row = {
     id:                   generateId(),
     student_id:           studentId,
     date:                 dateStr,
     completed_activities: completedActivities,
     quote:                quote || '',
     quote_likes:          [],
-  });
+  };
+  if (challengeId) row.challenge_id = challengeId;
+
+  const { error } = await supabase.from('submissions').insert(row);
   if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
   return true;
 }
