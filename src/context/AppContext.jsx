@@ -288,11 +288,19 @@ export function AppProvider({ children }) {
     setStudents(s => s.map(st => st.id === id ? { ...st, status: 'active' } : st));
   }, []);
 
-  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote, challengeId = null) => {
-    console.log('[AppContext] submitDay:', { studentId, dateStr });
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', challengeId);
+  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote, challengeId) => {
+    let resolvedChallengeId = challengeId ?? null;
+    if (resolvedChallengeId == null) {
+      const memberIds = challengeMemberships
+        .filter(m => m.studentId === studentId)
+        .map(m => m.challengeId);
+      const active = challenges.find(c => c.isActive && memberIds.includes(c.id));
+      resolvedChallengeId = active?.id ?? null;
+    }
+    console.log('[AppContext] submitDay:', { studentId, dateStr, resolvedChallengeId });
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', resolvedChallengeId);
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
-    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [], challengeId };
+    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [], challengeId: resolvedChallengeId };
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
       const already = (st.submissions || []).some(x => x.date === dateStr);
@@ -300,7 +308,7 @@ export function AppProvider({ children }) {
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));
     return students.find(st => st.id === studentId) || null;
-  }, [students]);
+  }, [students, challenges, challengeMemberships]);
 
   const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });
