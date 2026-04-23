@@ -40,20 +40,20 @@ const BADGE_DEFS = [
 
 // ─── Points logic specific to Challenges ───────────────────────────
 function getStudentChallengePoints(student, challengeId, defaultActivities, allChallenges) {
-  if (challengeId === 'all') return getStudentTotalPoints(student, defaultActivities);
+  if (challengeId === 'all') return Number(getStudentTotalPoints(student, defaultActivities) || 0);
   
   let pts = 0;
   if (challengeId === 'legacy') {
-    pts += (student.submissions || []).filter(s => !s.challengeId).reduce((sum, s) => sum + submissionPoints(s, defaultActivities), 0);
-    pts += (student.bonusPoints || []).filter(b => !b.challengeId).reduce((sum, b) => sum + (b.points || 0), 0);
+    pts += (student.submissions || []).filter(s => !s.challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, defaultActivities) || 0), 0);
+    pts += (student.bonusPoints || []).filter(b => !b.challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
     return pts;
   }
 
   const challenge = allChallenges.find(c => c.id === challengeId);
   const acts = challenge?.activities?.length ? challenge.activities : defaultActivities;
 
-  pts += (student.submissions || []).filter(s => s.challengeId === challengeId).reduce((sum, s) => sum + submissionPoints(s, acts), 0);
-  pts += (student.bonusPoints || []).filter(b => b.challengeId === challengeId).reduce((sum, b) => sum + (b.points || 0), 0);
+  pts += (student.submissions || []).filter(s => s.challengeId === challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, acts) || 0), 0);
+  pts += (student.bonusPoints || []).filter(b => b.challengeId === challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
   return pts;
 }
 
@@ -428,9 +428,9 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
           }
         }
       }
-      return sum + submissionPoints(sub, subActs);
+      return sum + Number(submissionPoints(sub, subActs) || 0);
     }, 0);
-    const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + (b.points || 0), 0);
+    const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
     return actPts + bonus;
   }, [s, activities, challenges, challengeMemberships]);
 
@@ -443,7 +443,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     (s.submissions || []).forEach(sub => {
       const c = myChalls.find(ch => ch.id === sub.challengeId);
       const acts = c?.activities?.length ? c.activities : activities;
-      const pts = submissionPoints(sub, acts);
+      const pts = Number(submissionPoints(sub, acts) || 0);
       if (sub.challengeId && breakdown[sub.challengeId]) {
         breakdown[sub.challengeId].points += pts;
       } else {
@@ -453,9 +453,9 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 
     (s.bonusPoints || []).forEach(bp => {
       if (bp.challengeId && breakdown[bp.challengeId]) {
-        breakdown[bp.challengeId].points += (bp.points || 0);
+        breakdown[bp.challengeId].points += Number(bp.points || 0);
       } else {
-        breakdown.legacy += (bp.points || 0);
+        breakdown.legacy += Number(bp.points || 0);
       }
     });
 
