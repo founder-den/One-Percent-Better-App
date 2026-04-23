@@ -118,7 +118,7 @@ function RegisterForm({ onShowLogin }) {
     else            setCodeHint(`✓ ${g.name}`);
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     const errs = {};
     if (!form.fullName.trim()) errs.fullName = 'Required';
