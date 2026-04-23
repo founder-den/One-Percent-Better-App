@@ -38,6 +38,25 @@ const BADGE_DEFS = [
   { id: 'dedicated',     emoji: '🤲', name: 'Dedicated',     desc: 'Completed ALL activities in a single submission at least once' },
 ];
 
+// ─── Points logic specific to Challenges ───────────────────────────
+function getStudentChallengePoints(student, challengeId, defaultActivities, allChallenges) {
+  if (challengeId === 'all') return getStudentTotalPoints(student, defaultActivities);
+  
+  let pts = 0;
+  if (challengeId === 'legacy') {
+    pts += (student.submissions || []).filter(s => !s.challengeId).reduce((sum, s) => sum + submissionPoints(s, defaultActivities), 0);
+    pts += (student.bonusPoints || []).filter(b => !b.challengeId).reduce((sum, b) => sum + (b.points || 0), 0);
+    return pts;
+  }
+
+  const challenge = allChallenges.find(c => c.id === challengeId);
+  const acts = challenge?.activities?.length ? challenge.activities : defaultActivities;
+
+  pts += (student.submissions || []).filter(s => s.challengeId === challengeId).reduce((sum, s) => sum + submissionPoints(s, acts), 0);
+  pts += (student.bonusPoints || []).filter(b => b.challengeId === challengeId).reduce((sum, b) => sum + (b.points || 0), 0);
+  return pts;
+}
+
 // ─── Pure badge helpers ────────────────────────────────────────────
 function calcBestStreak(student) {
   const subs = student.submissions || [];
@@ -375,6 +394,10 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
   // challenge-specific if the submission date falls within a challenge the student joined,
   // otherwise falls back to the general group activities.
   function getActivitiesForSub(sub) {
+    if (sub.challengeId) {
+      const c = challenges.find(ch => ch.id === sub.challengeId);
+      if (c && c.activities && c.activities.length > 0) return c.activities;
+    }
     const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
     for (const membership of memberOf) {
       const challenge = challenges.find(c => c.id === membership.challengeId);
@@ -389,15 +412,20 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 
   const totalPoints   = useMemo(() => {
     const actPts = (s.submissions || []).reduce((sum, sub) => {
-      const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
       let subActs = activities;
-      for (const membership of memberOf) {
-        const challenge = challenges.find(c => c.id === membership.challengeId);
-        if (!challenge) continue;
-        const { startDate, endDate, activities: challengeActs } = challenge;
-        if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
-          subActs = challengeActs || [];
-          break;
+      if (sub.challengeId) {
+        const c = challenges.find(ch => ch.id === sub.challengeId);
+        if (c && c.activities?.length) subActs = c.activities;
+      } else {
+        const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
+        for (const membership of memberOf) {
+          const challenge = challenges.find(c => c.id === membership.challengeId);
+          if (!challenge) continue;
+          const { startDate, endDate, activities: challengeActs } = challenge;
+          if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
+            subActs = challengeActs || [];
+            break;
+          }
         }
       }
       return sum + submissionPoints(sub, subActs);
@@ -405,6 +433,38 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + (b.points || 0), 0);
     return actPts + bonus;
   }, [s, activities, challenges, challengeMemberships]);
+
+  const pointsBreakdown = useMemo(() => {
+    const breakdown = { legacy: 0 };
+    const memberOf = challengeMemberships.filter(m => m.studentId === s.id).map(m => m.challengeId);
+    const myChalls = challenges.filter(c => memberOf.includes(c.id));
+    myChalls.forEach(c => breakdown[c.id] = { name: c.name, points: 0 });
+
+    (s.submissions || []).forEach(sub => {
+      const c = myChalls.find(ch => ch.id === sub.challengeId);
+      const acts = c?.activities?.length ? c.activities : activities;
+      const pts = submissionPoints(sub, acts);
+      if (sub.challengeId && breakdown[sub.challengeId]) {
+        breakdown[sub.challengeId].points += pts;
+      } else {
+        breakdown.legacy += pts;
+      }
+    });
+
+    (s.bonusPoints || []).forEach(bp => {
+      if (bp.challengeId && breakdown[bp.challengeId]) {
+        breakdown[bp.challengeId].points += (bp.points || 0);
+      } else {
+        breakdown.legacy += (bp.points || 0);
+      }
+    });
+
+    return {
+      legacy: breakdown.legacy,
+      challenges: myChalls.map(c => ({ id: c.id, name: breakdown[c.id].name, points: breakdown[c.id].points })).filter(c => c.points > 0)
+    };
+  }, [s.submissions, s.bonusPoints, challenges, challengeMemberships, activities]);
+
   const currentStreak = useMemo(() => getStudentStreak(s), [s]);
   const activeDays    = useMemo(() => getStudentActiveDays(s), [s]);
   const bestStreak    = useMemo(() => calcBestStreak(s), [s]);
@@ -494,6 +554,27 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
           </div>
         )}
 
+        {/* Points Breakdown */}
+        {(pointsBreakdown.legacy > 0 || pointsBreakdown.challenges.length > 0) && (
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '10px' }}>POINTS BREAKDOWN</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {pointsBreakdown.legacy > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>General / Legacy</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.legacy}</span>
+                </div>
+              )}
+              {pointsBreakdown.challenges.map(ch => (
+                <div key={ch.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{ch.name}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{ch.points}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Recent submissions */}
         {recentSubs.length > 0 && (
           <div>
@@ -514,8 +595,8 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 }
 
 // ─── Community student card ────────────────────────────────────────
-function CommunityStudentCard({ s, earnedBadges, activities, onClick }) {
-  const totalPoints   = getStudentTotalPoints(s, activities);
+function CommunityStudentCard({ s, earnedBadges, activities, points, onClick }) {
+  const displayPoints = points ?? getStudentTotalPoints(s, activities);
   const currentStreak = getStudentStreak(s);
   const topBadges     = BADGE_DEFS.filter(d => earnedBadges.has(d.id)).slice(0, 2);
   const [hovered, setHovered] = useState(false);
@@ -553,7 +634,7 @@ function CommunityStudentCard({ s, earnedBadges, activities, onClick }) {
         )}
       </div>
       <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-        <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{totalPoints}</span> pts
+        <span style={{ color: 'var(--gold)', fontWeight: 700 }}>{displayPoints}</span> pts
       </p>
     </div>
   );
@@ -658,6 +739,7 @@ export default function HomeTab({ onEditProfile }) {
 
   const [dismissed,    setDismissed]   = useState(() => getDismissed());
   const [modalStudent, setModalStudent] = useState(null);
+  const [leaderboardChallengeId, setLeaderboardChallengeId] = useState('all');
 
   const group = findGroupById(student.groupId);
 
@@ -740,8 +822,11 @@ export default function HomeTab({ onEditProfile }) {
 
   // ── Community students (same group, sorted by points) ───────────
   const communityStudents = useMemo(
-    () => [...groupStudents].sort((a, b) => getStudentTotalPoints(b, activities) - getStudentTotalPoints(a, activities)),
-    [groupStudents, activities]
+    () => [...groupStudents].sort((a, b) => 
+      getStudentChallengePoints(b, leaderboardChallengeId, activities, challenges) - 
+      getStudentChallengePoints(a, leaderboardChallengeId, activities, challenges)
+    ),
+    [groupStudents, activities, challenges, leaderboardChallengeId]
   );
 
   function handleDismiss(id) {
@@ -850,6 +935,9 @@ export default function HomeTab({ onEditProfile }) {
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-bold text-gold">
+                      {getStudentChallengePoints(student, c.id, activities, [c])} pts
+                    </span>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-500/15 text-green-400' : 'bg-border text-muted'}`}>
                       {c.isActive ? 'Active' : 'Ended'}
                     </span>
@@ -897,7 +985,20 @@ export default function HomeTab({ onEditProfile }) {
       {/* ── Section 7: Community ─────────────────────────────────── */}
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <SectionHeading className="mb-0">Community</SectionHeading>
+          <div className="flex flex-wrap items-center gap-3">
+            <SectionHeading className="mb-0">Community</SectionHeading>
+            <select
+              value={leaderboardChallengeId}
+              onChange={e => setLeaderboardChallengeId(e.target.value)}
+              className="bg-bg-card2 border border-border text-primary rounded-lg px-2 py-1 text-xs outline-none focus:border-gold"
+            >
+              <option value="all">All-Time Points</option>
+              <option value="legacy">General / Legacy</option>
+              {challenges.filter(c => c.isActive).map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
           <span className="text-xs text-muted flex items-center gap-1">
             <Users size={12} className="text-gold" />
             {communityStudents.length} member{communityStudents.length !== 1 ? 's' : ''}
@@ -913,6 +1014,7 @@ export default function HomeTab({ onEditProfile }) {
                 s={s}
                 earnedBadges={allStudentBadges[s.id] || new Set()}
                 activities={activities}
+                points={getStudentChallengePoints(s, leaderboardChallengeId, activities, challenges)}
                 onClick={() => setModalStudent(s)}
               />
             ))}

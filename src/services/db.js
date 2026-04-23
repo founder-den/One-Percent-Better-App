@@ -40,12 +40,13 @@ function mapSubmission(row) {
     completedActivities: row.completed_activities || [],
     quote:               row.quote || '',
     quoteLikes:          row.quote_likes || [],
+    challengeId:         row.challenge_id || null,
     ...(typeof row.score_override === 'number' ? { scoreOverride: row.score_override } : {}),
   };
 }
 
 function mapBonusPoint(row) {
-  return { id: row.id, date: row.date, points: row.points, reason: row.reason || '' };
+  return { id: row.id, date: row.date, points: row.points, reason: row.reason || '', challengeId: row.challenge_id || null };
 }
 
 function mapBook(row) {
@@ -580,12 +581,13 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     completed_activities: completedActivities,
     quote:                quote || '',
     quote_likes:          [],
+    challenge_id:         challengeId,
   });
   if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
   return true;
 }
 
-export async function dbEditSubmission(studentId, dateStr, completedActivities, scoreOverride) {
+export async function dbEditSubmission(studentId, dateStr, completedActivities, scoreOverride, challengeId) {
   console.log('[db] editSubmission:', studentId, dateStr);
   const { data: existing } = await supabase
     .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
@@ -593,6 +595,7 @@ export async function dbEditSubmission(studentId, dateStr, completedActivities, 
   const updatePayload = { completed_activities: completedActivities };
   if (typeof scoreOverride === 'number') updatePayload.score_override = scoreOverride;
   else updatePayload.score_override = null;
+  if (challengeId !== undefined) updatePayload.challenge_id = challengeId;
 
   if (existing) {
     const { error } = await supabase.from('submissions')
@@ -608,6 +611,7 @@ export async function dbEditSubmission(studentId, dateStr, completedActivities, 
       score_override:       typeof scoreOverride === 'number' ? scoreOverride : null,
       quote:                '',
       quote_likes:          [],
+      challenge_id:         challengeId || null,
     });
     if (error) { console.error('[db] editSubmission insert — FAILED:', error); return false; }
   }
@@ -642,15 +646,16 @@ export async function dbToggleQuoteLike(ownerId, dateStr, likerId) {
 }
 
 // ─── BONUS POINTS ─────────────────────────────────────────────────
-export async function dbAddBonusPoints(studentId, date, points, reason) {
+export async function dbAddBonusPoints(studentId, date, points, reason, challengeId = null) {
   console.log('[db] addBonusPoints:', studentId, points);
-  const bp = { id: generateId(), date, points: Number(points), reason: reason || '' };
+  const bp = { id: generateId(), date, points: Number(points), reason: reason || '', challengeId };
   const { error } = await supabase.from('bonus_points').insert({
-    id:         bp.id,
-    student_id: studentId,
-    date:       bp.date,
-    points:     bp.points,
-    reason:     bp.reason,
+    id:           bp.id,
+    student_id:   studentId,
+    date:         bp.date,
+    points:       bp.points,
+    reason:       bp.reason,
+    challenge_id: challengeId,
   });
   if (error) { console.error('[db] addBonusPoints — Supabase write FAILED:', error); return null; }
   return bp;

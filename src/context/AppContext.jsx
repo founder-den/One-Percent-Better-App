@@ -288,11 +288,11 @@ export function AppProvider({ children }) {
     setStudents(s => s.map(st => st.id === id ? { ...st, status: 'active' } : st));
   }, []);
 
-  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote) => {
+  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote, challengeId = null) => {
     console.log('[AppContext] submitDay:', { studentId, dateStr });
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '');
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', challengeId);
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
-    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [] };
+    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [], challengeId };
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
       const already = (st.submissions || []).some(x => x.date === dateStr);

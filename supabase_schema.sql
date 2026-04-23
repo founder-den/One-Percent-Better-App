@@ -297,3 +297,7 @@ ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_all" ON students;
 CREATE POLICY "students_read" ON students FOR SELECT USING (true);
 CREATE POLICY "students_write" ON students FOR ALL USING (auth.uid()::text = id) WITH CHECK (auth.uid()::text = id);
+
+-- ─── Data Association for Challenges ─────────────────────────────
+ALTER TABLE submissions ADD COLUMN IF NOT EXISTS challenge_id text REFERENCES challenges(id) ON DELETE SET NULL;
+ALTER TABLE bonus_points ADD COLUMN IF NOT EXISTS challenge_id text REFERENCES challenges(id) ON DELETE SET NULL;
