@@ -222,6 +222,7 @@ ALTER TABLE personal_tasbih_templates
 -- ALTER PUBLICATION supabase_realtime ADD TABLE global_tasbihs;
 -- ALTER PUBLICATION supabase_realtime ADD TABLE students;
 -- ALTER PUBLICATION supabase_realtime ADD TABLE submissions;
+-- ALTER PUBLICATION supabase_realtime ADD TABLE bonus_points;
 --
 -- If you don't have superuser access, enable them in the Supabase
 -- Dashboard under Database → Replication → Tables.

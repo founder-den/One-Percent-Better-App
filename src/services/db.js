@@ -1071,3 +1071,10 @@ export function subscribeToSubmissions(cb) {
     .subscribe();
   return () => supabase.removeChannel(channel);
 }
+
+export function subscribeToBonusPoints(cb) {
+  const channel = supabase.channel('rt_bonus_points')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bonus_points' }, cb)
+    .subscribe();
+  return () => supabase.removeChannel(channel);
+}

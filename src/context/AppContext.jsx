@@ -28,6 +28,7 @@ import {
   subscribeToGlobalTasbihs,
   subscribeToStudents,
   subscribeToSubmissions,
+  subscribeToBonusPoints,
 } from '../services/db.js';
 
 const DEFAULT_ACTIVITIES = [
@@ -145,20 +146,32 @@ export function AppProvider({ children }) {
   // ── Realtime subscriptions ────────────────────────────────────
   useEffect(() => {
     if (loading) return;
-    const unsubGlobal = subscribeToGlobalTasbihs(async () => {
-      const data = await loadAll();
-      setGlobalTasbihs(data.globalTasbihs);
-      setCollectiveCounts(data.collectiveTaskCounts);
-    });
-    const unsubStudents = subscribeToStudents(async () => {
-      const data = await loadAll();
-      setStudents(data.students);
-    });
-    const unsubSubs = subscribeToSubmissions(async () => {
-      const data = await loadAll();
-      setStudents(data.students);
-    });
-    return () => { unsubGlobal(); unsubStudents(); unsubSubs(); };
+
+    let timeoutId;
+    const handleRealtimeEvent = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        console.log('[Realtime] Database changed, reloading background data...');
+        try {
+          const data = await loadAll();
+          setStudents(data.students);
+          setGlobalTasbihs(data.globalTasbihs);
+          setCollectiveCounts(data.collectiveTaskCounts);
+        } catch (err) {
+          console.error('[Realtime] Background reload failed:', err);
+        }
+      }, 1000);
+    };
+
+    const unsubGlobal   = subscribeToGlobalTasbihs(handleRealtimeEvent);
+    const unsubStudents = subscribeToStudents(handleRealtimeEvent);
+    const unsubSubs     = subscribeToSubmissions(handleRealtimeEvent);
+    const unsubBonus    = subscribeToBonusPoints(handleRealtimeEvent);
+
+    return () => {
+      clearTimeout(timeoutId);
+      unsubGlobal(); unsubStudents(); unsubSubs(); unsubBonus();
+    };
   }, [loading]);
 
   // ── Community ─────────────────────────────────────────────────
