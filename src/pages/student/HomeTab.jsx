@@ -392,7 +392,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     return activities;
   }
 
-  const totalPoints = useMemo(() => getStudentGrandTotal(s, challenges, activities), [s, challenges, activities]);
+  const totalPoints = useMemo(() => getStudentGrandTotal(s, s.submissions || [], challenges), [s, challenges]);
 
   const pointsBreakdown = useMemo(() => {
     const myMemberships = challengeMemberships.filter(m => m.studentId === s.id);
@@ -539,8 +539,8 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 }
 
 // ─── Community student card ────────────────────────────────────────
-function CommunityStudentCard({ s, earnedBadges, activities, challenges, onClick }) {
-  const totalPoints   = getStudentGrandTotal(s, challenges, activities);
+function CommunityStudentCard({ s, earnedBadges, challenges, onClick }) {
+  const totalPoints   = getStudentGrandTotal(s, s.submissions || [], challenges);
   const currentStreak = getStudentStreak(s);
   const topBadges     = BADGE_DEFS.filter(d => earnedBadges.has(d.id)).slice(0, 2);
   const [hovered, setHovered] = useState(false);
@@ -718,7 +718,7 @@ export default function HomeTab({ onEditProfile }) {
   const allStudentBadges = useMemo(() => {
     const sorted = [...students]
       .filter(s => (s.status || 'active') === 'active')
-      .sort((a, b) => getStudentGrandTotal(b, challenges, activities) - getStudentGrandTotal(a, challenges, activities));
+      .sort((a, b) => getStudentGrandTotal(b, b.submissions || [], challenges) - getStudentGrandTotal(a, a.submissions || [], challenges));
     const ranks = {};
     sorted.forEach((s, i) => { ranks[s.id] = i + 1; });
 
@@ -765,8 +765,8 @@ export default function HomeTab({ onEditProfile }) {
 
   // ── Community students (same group, sorted by points) ───────────
   const communityStudents = useMemo(
-    () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, challenges, activities) - getStudentGrandTotal(a, challenges, activities)),
-    [groupStudents, activities, challenges]
+    () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, b.submissions || [], challenges) - getStudentGrandTotal(a, a.submissions || [], challenges)),
+    [groupStudents, challenges]
   );
 
   function handleDismiss(id) {
@@ -937,7 +937,6 @@ export default function HomeTab({ onEditProfile }) {
                 key={s.id}
                 s={s}
                 earnedBadges={allStudentBadges[s.id] || new Set()}
-                activities={activities}
                 challenges={challenges}
                 onClick={() => setModalStudent(s)}
               />

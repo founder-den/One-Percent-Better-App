@@ -58,15 +58,16 @@ function bonusBetween(student, start, end) {
     .reduce((sum, b) => sum + Number(b.points || 0), 0);
 }
 
-// ─── Grand total: all submissions (challenge-aware) + bonus points ──
-export function getStudentGrandTotal(student, challenges, fallbackActivities) {
-  const subPts = (student.submissions || []).reduce((sum, sub) => {
-    let acts = fallbackActivities;
-    if (sub.challengeId) {
-      const ch = (challenges || []).find(c => c.id === sub.challengeId);
-      if (ch) acts = ch.activities || [];
-    }
-    return sum + Number(subPoints(sub, pointsMap(acts)) || 0);
+// ─── Grand total: all challenge submissions + bonus points ────────────
+export function getStudentGrandTotal(student, submissions, challenges) {
+  const subPts = (submissions || []).reduce((sum, sub) => {
+    const ch = (challenges || []).find(c => c.id === sub.challengeId);
+    if (!ch) return sum;
+    const chPts = (sub.completedActivities || []).reduce((s, actId) => {
+      const act = (ch.activities || []).find(a => a.id === actId);
+      return s + Number(act?.points || 0);
+    }, 0);
+    return sum + Number(chPts || 0);
   }, 0);
   const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
   return subPts + bonusPts;
