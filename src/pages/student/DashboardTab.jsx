@@ -86,9 +86,10 @@ export default function DashboardTab({ challenge, memberStudents }) {
   // ── Stats ──────────────────────────────────────────────────────
   // In challenge mode: total = points within challenge date range using challenge activities
   const totalPts = isChallenge
-    ? Number((student.submissions || []).filter(s => s.challengeId === challenge.id).reduce((sum, s) => sum + Number(submissionPoints(s, allActivities) || 0), 0)) +
-      Number((student.bonusPoints || []).filter(b => b.challengeId === challenge.id).reduce((sum, b) => sum + Number(b.points || 0), 0))
-    : Number(getStudentTotalPoints(student, allActivities) || 0);
+    ? (challenge.startDate && challenge.endDate
+        ? getStudentPeriodPoints(student, allActivities, challenge.startDate, challenge.endDate)
+        : getStudentTotalPoints(student, allActivities))
+    : getStudentTotalPoints(student, allActivities);
 
   const periodPts = period
     ? getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate)
@@ -116,11 +117,11 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setChecked(c => ({ ...c, [id]: !c[id] }));
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const updated = await submitDay(student.id, dateStr, ids, quote.trim(), challenge?.id || null);
+    const updated = submitDay(student.id, dateStr, ids, quote.trim());
     if (!updated) { setErr('Already submitted for this day.'); return; }
     refreshStudent(updated);
     setChecked({});

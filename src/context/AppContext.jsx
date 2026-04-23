@@ -28,7 +28,6 @@ import {
   subscribeToGlobalTasbihs,
   subscribeToStudents,
   subscribeToSubmissions,
-  subscribeToBonusPoints,
 } from '../services/db.js';
 
 const DEFAULT_ACTIVITIES = [
@@ -146,32 +145,20 @@ export function AppProvider({ children }) {
   // ── Realtime subscriptions ────────────────────────────────────
   useEffect(() => {
     if (loading) return;
-
-    let timeoutId;
-    const handleRealtimeEvent = () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        console.log('[Realtime] Database changed, reloading background data...');
-        try {
-          const data = await loadAll();
-          setStudents(data.students);
-          setGlobalTasbihs(data.globalTasbihs);
-          setCollectiveCounts(data.collectiveTaskCounts);
-        } catch (err) {
-          console.error('[Realtime] Background reload failed:', err);
-        }
-      }, 1000);
-    };
-
-    const unsubGlobal   = subscribeToGlobalTasbihs(handleRealtimeEvent);
-    const unsubStudents = subscribeToStudents(handleRealtimeEvent);
-    const unsubSubs     = subscribeToSubmissions(handleRealtimeEvent);
-    const unsubBonus    = subscribeToBonusPoints(handleRealtimeEvent);
-
-    return () => {
-      clearTimeout(timeoutId);
-      unsubGlobal(); unsubStudents(); unsubSubs(); unsubBonus();
-    };
+    const unsubGlobal = subscribeToGlobalTasbihs(async () => {
+      const data = await loadAll();
+      setGlobalTasbihs(data.globalTasbihs);
+      setCollectiveCounts(data.collectiveTaskCounts);
+    });
+    const unsubStudents = subscribeToStudents(async () => {
+      const data = await loadAll();
+      setStudents(data.students);
+    });
+    const unsubSubs = subscribeToSubmissions(async () => {
+      const data = await loadAll();
+      setStudents(data.students);
+    });
+    return () => { unsubGlobal(); unsubStudents(); unsubSubs(); };
   }, [loading]);
 
   // ── Community ─────────────────────────────────────────────────
@@ -288,19 +275,11 @@ export function AppProvider({ children }) {
     setStudents(s => s.map(st => st.id === id ? { ...st, status: 'active' } : st));
   }, []);
 
-  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote, challengeId) => {
-    let resolvedChallengeId = challengeId ?? null;
-    if (resolvedChallengeId == null) {
-      const memberIds = challengeMemberships
-        .filter(m => m.studentId === studentId)
-        .map(m => m.challengeId);
-      const active = challenges.find(c => c.isActive && memberIds.includes(c.id));
-      resolvedChallengeId = active?.id ?? null;
-    }
-    console.log('[AppContext] submitDay:', { studentId, dateStr, resolvedChallengeId });
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', resolvedChallengeId);
+  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote) => {
+    console.log('[AppContext] submitDay:', { studentId, dateStr });
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '');
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
-    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [], challengeId: resolvedChallengeId };
+    const sub = { date: dateStr, completedActivities, quote: quote || '', quoteLikes: [] };
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
       const already = (st.submissions || []).some(x => x.date === dateStr);
@@ -308,7 +287,7 @@ export function AppProvider({ children }) {
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));
     return students.find(st => st.id === studentId) || null;
-  }, [students, challenges, challengeMemberships]);
+  }, [students]);
 
   const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });

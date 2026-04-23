@@ -66,16 +66,6 @@ export default function ProfileTab() {
   const [pwErr,  setPwErr]  = useState('');
   const [pwOk,   setPwOk]   = useState('');
 
-  const isDirty =
-    form.fullName !== (student.fullName || '') ||
-    form.university !== (student.university || '') ||
-    form.phone !== (student.phone || '') ||
-    form.telegramUsername !== (student.telegramUsername || '') ||
-    form.preferredLanguage !== (student.preferredLanguage || 'en') ||
-    avatar !== (student.avatar || null);
-
-  const isPwDirty = pwForm.current !== '' || pwForm.newPw !== '' || pwForm.confirm !== '';
-
   function set(k) {
     return e => { setForm(f => ({ ...f, [k]: e.target.value })); setSaved(false); setErr(''); };
   }
@@ -225,10 +215,10 @@ export default function ProfileTab() {
           </div>
 
           <div className="flex gap-2 mt-2">
-            <Button type="submit" className="flex-1 gap-1.5" disabled={!isDirty}>
+            <Button type="submit" className="flex-1 gap-1.5">
               <Check size={14} /> Save Changes
             </Button>
-            <Button type="button" variant="ghost" onClick={handleCancel} className="gap-1.5" disabled={!isDirty}>
+            <Button type="button" variant="ghost" onClick={handleCancel} className="gap-1.5">
               <X size={14} /> Cancel
             </Button>
           </div>
@@ -260,9 +250,7 @@ export default function ProfileTab() {
             onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
             autoComplete="new-password"
           />
-          <Button type="submit" full variant="outline" disabled={!isPwDirty}>
-            Change Password
-          </Button>
+          <Button type="submit" full variant="outline">Change Password</Button>
         </form>
       </Card>
 
