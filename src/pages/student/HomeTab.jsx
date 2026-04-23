@@ -39,30 +39,22 @@ const BADGE_DEFS = [
 ];
 
 // ─── Points logic specific to Challenges ───────────────────────────
-function getStudentChallengePoints(student, challengeId, defaultActivities, allChallenges) {
+function getStudentChallengePoints(student, challengeId, defaultActivities) {
   if (challengeId === 'all') {
-    let allPts = 0;
-    (student.submissions || []).forEach(s => {
-      const acts = s.challengeId ? (allChallenges.find(c => c.id === s.challengeId)?.activities || defaultActivities) : defaultActivities;
-      allPts += Number(submissionPoints(s, acts) || 0);
-    });
-    allPts += (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
-    return allPts;
+    const actPts = (student.submissions || []).reduce((sum, s) => sum + Number(submissionPoints(s, defaultActivities) || 0), 0);
+    const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
+    return actPts + bonusPts;
   }
-  
-  let pts = 0;
+
   if (challengeId === 'legacy') {
-    pts += (student.submissions || []).filter(s => !s.challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, defaultActivities) || 0), 0);
-    pts += (student.bonusPoints || []).filter(b => !b.challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
-    return pts;
+    const actPts = (student.submissions || []).filter(s => !s.challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, defaultActivities) || 0), 0);
+    const bonusPts = (student.bonusPoints || []).filter(b => !b.challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
+    return actPts + bonusPts;
   }
 
-  const challenge = allChallenges.find(c => c.id === challengeId);
-  const acts = challenge?.activities?.length ? challenge.activities : defaultActivities;
-
-  pts += (student.submissions || []).filter(s => s.challengeId === challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, acts) || 0), 0);
-  pts += (student.bonusPoints || []).filter(b => b.challengeId === challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
-  return pts;
+  const actPts = (student.submissions || []).filter(s => s.challengeId === challengeId).reduce((sum, s) => sum + Number(submissionPoints(s, defaultActivities) || 0), 0);
+  const bonusPts = (student.bonusPoints || []).filter(b => b.challengeId === challengeId).reduce((sum, b) => sum + Number(b.points || 0), 0);
+  return actPts + bonusPts;
 }
 
 // ─── Pure badge helpers ────────────────────────────────────────────
@@ -398,79 +390,42 @@ function InlineAvatar({ src, name, size = 48 }) {
 
 // ─── Public profile modal ──────────────────────────────────────────
 function PublicProfileModal({ s, activities, allStudents, groupActivities, groupPeriods, findGroupById, challenges, challengeMemberships, onClose }) {
-  // Returns the activities array to use for a given submission:
-  // challenge-specific if the submission date falls within a challenge the student joined,
-  // otherwise falls back to the general group activities.
-  function getActivitiesForSub(sub) {
-    if (sub.challengeId) {
-      const c = challenges.find(ch => ch.id === sub.challengeId);
-      if (c && c.activities && c.activities.length > 0) return c.activities;
-    }
-    const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
-    for (const membership of memberOf) {
-      const challenge = challenges.find(c => c.id === membership.challengeId);
-      if (!challenge) continue;
-      const { startDate, endDate, activities: challengeActs } = challenge;
-      if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
-        return challengeActs || [];
-      }
-    }
-    return activities;
-  }
-
   const totalPoints   = useMemo(() => {
-    const actPts = (s.submissions || []).reduce((sum, sub) => {
-      let subActs = activities;
-      if (sub.challengeId) {
-        const c = challenges.find(ch => ch.id === sub.challengeId);
-        if (c && c.activities?.length) subActs = c.activities;
-      } else {
-        const memberOf = challengeMemberships.filter(m => m.studentId === s.id);
-        for (const membership of memberOf) {
-          const challenge = challenges.find(c => c.id === membership.challengeId);
-          if (!challenge) continue;
-          const { startDate, endDate, activities: challengeActs } = challenge;
-          if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
-            subActs = challengeActs || [];
-            break;
-          }
-        }
-      }
-      return sum + Number(submissionPoints(sub, subActs) || 0);
-    }, 0);
-    const bonus = (s.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
+    const actPts = (s.submissions || []).reduce((sum, sub) => sum + Number(submissionPoints(sub, activities) || 0), 0);
+    const bonus  = (s.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
     return actPts + bonus;
-  }, [s, activities, challenges, challengeMemberships]);
+  }, [s.submissions, s.bonusPoints, activities]);
 
   const pointsBreakdown = useMemo(() => {
-    const breakdown = { legacy: 0 };
     const memberOf = challengeMemberships.filter(m => m.studentId === s.id).map(m => m.challengeId);
     const myChalls = challenges.filter(c => memberOf.includes(c.id));
-    myChalls.forEach(c => breakdown[c.id] = { name: c.name, points: 0 });
+    const rows = {};
+    myChalls.forEach(c => { rows[c.id] = { id: c.id, name: c.name, points: 0 }; });
+
+    let legacyPts = 0;
+    let standaloneBonusPts = 0;
 
     (s.submissions || []).forEach(sub => {
-      const c = myChalls.find(ch => ch.id === sub.challengeId);
-      const acts = c?.activities?.length ? c.activities : activities;
-      const pts = Number(submissionPoints(sub, acts) || 0);
-      if (sub.challengeId && breakdown[sub.challengeId]) {
-        breakdown[sub.challengeId].points += pts;
+      const pts = Number(submissionPoints(sub, activities) || 0);
+      if (sub.challengeId && rows[sub.challengeId] !== undefined) {
+        rows[sub.challengeId].points += pts;
       } else {
-        breakdown.legacy += pts;
+        legacyPts += pts;
       }
     });
 
     (s.bonusPoints || []).forEach(bp => {
-      if (bp.challengeId && breakdown[bp.challengeId]) {
-        breakdown[bp.challengeId].points += Number(bp.points || 0);
+      const pts = Number(bp.points || 0);
+      if (bp.challengeId && rows[bp.challengeId] !== undefined) {
+        rows[bp.challengeId].points += pts;
       } else {
-        breakdown.legacy += Number(bp.points || 0);
+        standaloneBonusPts += pts;
       }
     });
 
-    return {
-      legacy: breakdown.legacy,
-      challenges: myChalls.map(c => ({ id: c.id, name: breakdown[c.id].name, points: breakdown[c.id].points })).filter(c => c.points > 0)
-    };
+    const challengeList = myChalls.map(c => rows[c.id]);
+    const total = challengeList.reduce((sum, c) => sum + c.points, 0) + legacyPts + standaloneBonusPts;
+    return { challenges: challengeList, legacyPts, standaloneBonusPts, total };
   }, [s.submissions, s.bonusPoints, challenges, challengeMemberships, activities]);
 
   const currentStreak = useMemo(() => getStudentStreak(s), [s]);
@@ -563,22 +518,32 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
         )}
 
         {/* Points Breakdown */}
-        {(pointsBreakdown.legacy > 0 || pointsBreakdown.challenges.length > 0) && (
+        {(pointsBreakdown.challenges.length > 0 || pointsBreakdown.legacyPts > 0 || pointsBreakdown.standaloneBonusPts > 0) && (
           <div style={{ marginBottom: '20px' }}>
             <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '10px' }}>POINTS BREAKDOWN</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {pointsBreakdown.legacy > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>General / Legacy</span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.legacy}</span>
-                </div>
-              )}
               {pointsBreakdown.challenges.map(ch => (
                 <div key={ch.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{ch.name}</span>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{ch.points}</span>
                 </div>
               ))}
+              {pointsBreakdown.legacyPts > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>General / Legacy</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.legacyPts}</span>
+                </div>
+              )}
+              {pointsBreakdown.standaloneBonusPts > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Bonus Points</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.standaloneBonusPts}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--gold)', borderRadius: '8px', marginTop: '2px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>Total</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.total}</span>
+              </div>
             </div>
           </div>
         )}
@@ -591,7 +556,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
               {recentSubs.map(sub => (
                 <div key={sub.date} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(sub.date)}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{submissionPoints(sub, getActivitiesForSub(sub))}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{submissionPoints(sub, activities)}</span>
                 </div>
               ))}
             </div>
@@ -831,10 +796,10 @@ export default function HomeTab({ onEditProfile }) {
   // ── Community students (same group, sorted by points) ───────────
   const communityStudents = useMemo(
     () => [...groupStudents].sort((a, b) => 
-      getStudentChallengePoints(b, leaderboardChallengeId, activities, challenges) - 
-      getStudentChallengePoints(a, leaderboardChallengeId, activities, challenges)
+      getStudentChallengePoints(b, leaderboardChallengeId, activities) -
+      getStudentChallengePoints(a, leaderboardChallengeId, activities)
     ),
-    [groupStudents, activities, challenges, leaderboardChallengeId]
+    [groupStudents, activities, leaderboardChallengeId]
   );
 
   function handleDismiss(id) {
@@ -944,7 +909,7 @@ export default function HomeTab({ onEditProfile }) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs font-bold text-gold">
-                      {getStudentChallengePoints(student, c.id, activities, [c])} pts
+                      {getStudentChallengePoints(student, c.id, activities)} pts
                     </span>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${c.isActive ? 'bg-green-500/15 text-green-400' : 'bg-border text-muted'}`}>
                       {c.isActive ? 'Active' : 'Ended'}
@@ -1022,7 +987,7 @@ export default function HomeTab({ onEditProfile }) {
                 s={s}
                 earnedBadges={allStudentBadges[s.id] || new Set()}
                 activities={activities}
-                points={getStudentChallengePoints(s, leaderboardChallengeId, activities, challenges)}
+                points={getStudentChallengePoints(s, leaderboardChallengeId, activities)}
                 onClick={() => setModalStudent(s)}
               />
             ))}
