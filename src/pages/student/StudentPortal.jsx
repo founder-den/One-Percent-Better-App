@@ -137,13 +137,23 @@ function RegisterForm({ onShowLogin }) {
     setLoading(true);
 
     const status = registrationMode === 'approval' ? 'pending' : 'active';
-    const newStudent = await dbRegisterStudent({ ...form, groupId: grp.id, status });
-
-    if (newStudent) {
-      window.location.reload(); // Quick refresh so AuthContext grabs the new session + students array
-    } else {
-      setErrors({ code: 'Registration failed. Username might be taken.' });
+    try {
+      await dbRegisterStudent({ ...form, groupId: grp.id, status });
+      window.location.reload(); // AuthContext grabs new session + students array
+    } catch (err) {
       setLoading(false);
+      const code = err.message || '';
+      if (code === 'USERNAME_TAKEN') {
+        setErrors({ username: 'Username already taken. Please choose a different one.' });
+      } else if (code === 'AUTH_USER_EXISTS') {
+        setErrors({ username: 'An account with this username already exists. Please sign in instead.' });
+      } else if (code === 'INVALID_GROUP') {
+        setErrors({ code: 'Invalid group code. Please check and try again.' });
+      } else if (code === 'GROUP_INACTIVE') {
+        setErrors({ code: 'This group is not currently accepting registrations.' });
+      } else {
+        setErrors({ code: `Registration failed: ${code || 'Unknown error'}` });
+      }
     }
   }
 

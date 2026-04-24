@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { supabase } from '../services/supabase.js';
 import {
   getAdminSession, setAdminSession, clearAdminSession,
@@ -8,22 +8,25 @@ import { useApp } from './AppContext.jsx';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const { students, loading } = useApp();
+  const { students, loading, reload } = useApp();
   const [session, setSession] = useState(null);
-  const [isAdmin,         setIsAdminState]    = useState(() => getAdminSession());
+  const [isAdmin, setIsAdminState] = useState(() => getAdminSession());
 
-  // Listen for Supabase Auth state changes automatically
+  // Listen for auth state changes.
+  // On SIGNED_IN / INITIAL_SESSION we reload app data so the Supabase client
+  // sends the auth token — which is required when RLS is enabled on any table.
+  // The initial AppProvider reload fires before this provider mounts (no session
+  // yet), so RLS-protected tables like `students` return [] on that first pass.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        // Re-fetch all data now that the auth token is available
+        reload();
+      }
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
     return () => subscription.unsubscribe();
-  }, []);
+  }, [reload]);
 
   // Safely find the logged in student based on their secure UUID
   const student = session ? (students.find(s => s.id === session.user.id) || null) : null;

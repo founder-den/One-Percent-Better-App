@@ -239,11 +239,17 @@ export function AppProvider({ children }) {
       tasbih: { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
       personalTasbihProgress: {},
     };
-    const confirmed = await dbRegisterStudent(newStudent);
-    if (!confirmed) { console.error('[AppContext] registerStudent: Supabase write failed — state NOT updated'); return null; }
+    let confirmed;
+    try {
+      confirmed = await dbRegisterStudent(newStudent);
+    } catch (e) {
+      console.error('[AppContext] registerStudent threw:', e.message);
+      return null;
+    }
+    if (!confirmed) { console.error('[AppContext] registerStudent: returned null — state NOT updated'); return null; }
     const withArrays = { ...confirmed, submissions: [], bonusPoints: [], books: [], programCompletions: [] };
     setStudents(s => [...s, withArrays]);
-    setSessionUsername(withArrays.username); // auto-login: AuthContext picks this up on next students update
+    setSessionUsername(withArrays.username);
     return withArrays;
   }, []);
 

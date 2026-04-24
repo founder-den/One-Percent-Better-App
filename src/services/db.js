@@ -305,8 +305,11 @@ export async function loadAll() {
     periods:    periodRows?.length    ?? 'ERROR',
     challenges: challengeRows?.length ?? 'ERROR',
   });
+  if (studentRows?.length === 0 && !e1) {
+    console.warn('[db] loadAll — students returned 0 rows with no error. Almost certainly an RLS block. Fix: Supabase dashboard → Authentication → Policies → students → add policy FOR ALL TO authenticated USING (true).');
+  }
   if (periodRows?.length === 0 && !e7) {
-    console.warn('[db] loadAll — periods returned 0 rows with no error. Likely RLS block. Check Supabase → Authentication → Policies → periods table.');
+    console.warn('[db] loadAll — periods returned 0 rows with no error. Likely RLS block on periods table.');
   }
   if (submissionRows?.length === 0 && !e2) {
     console.warn('[db] loadAll — submissions returned 0 rows with no error. Possible RLS block on submissions table.');
@@ -534,23 +537,57 @@ export async function dbActivatePeriod(id, groupId) {
 }
 
 // ─── STUDENTS ─────────────────────────────────────────────────────
+// Throws descriptive Error codes so callers can show the right message:
+//   USERNAME_TAKEN   — username already in students table
+//   AUTH_USER_EXISTS — Supabase Auth already has this email
+//   INVALID_GROUP    — groupId not found in groups table
+//   GROUP_INACTIVE   — group exists but is not active
+//   INSERT_FAILED    — students row insert failed
 export async function dbRegisterStudent(student) {
-  console.log('[db] registerStudent:', student.username, '— inserting into Supabase');
+  console.log('[db] registerStudent:', student.username);
 
-  // 1. Register securely with Supabase Auth using a generated hidden email
-  const email = `${student.username.toLowerCase().replace(/\s+/g, '')}@1percentbetter.app`;
+  // 1. Check username availability in the students table before touching auth
+  const { data: existingUser, error: userCheckError } = await supabase
+    .from('students')
+    .select('id')
+    .ilike('username', student.username.trim())
+    .maybeSingle();
+  if (userCheckError) console.warn('[db] registerStudent — username check error (continuing):', userCheckError);
+  if (existingUser) {
+    console.warn('[db] registerStudent — username already taken:', student.username);
+    throw new Error('USERNAME_TAKEN');
+  }
+
+  // 2. Verify the group exists and is active in the DB
+  if (student.groupId) {
+    const { data: group, error: groupError } = await supabase
+      .from('groups')
+      .select('id, is_active')
+      .eq('id', student.groupId)
+      .maybeSingle();
+    if (groupError) console.warn('[db] registerStudent — group check error:', groupError);
+    if (!group) throw new Error('INVALID_GROUP');
+    if (!group.is_active) throw new Error('GROUP_INACTIVE');
+  }
+
+  // 3. Register with Supabase Auth
+  const email = `${student.username.trim().toLowerCase().replace(/\s+/g, '')}@1percentbetter.app`;
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password: student.password,
   });
 
   if (authError) {
-    console.error('[db] registerStudent Auth FAILED:', authError);
-    return null;
+    console.error('[db] registerStudent — Auth FAILED:', authError);
+    const msg = (authError.message || '').toLowerCase();
+    if (msg.includes('already registered') || msg.includes('user already')) {
+      throw new Error('AUTH_USER_EXISTS');
+    }
+    throw new Error(authError.message || 'AUTH_FAILED');
   }
 
-  // 2. Insert the student data using the new secure Auth UUID
-  const { error } = await supabase.from('students').insert({
+  // 4. Insert the student data using the new secure Auth UUID
+  const { error: insertError } = await supabase.from('students').insert({
     id:                       authData.user.id,
     full_name:                student.fullName,
     username:                 student.username,
@@ -565,12 +602,12 @@ export async function dbRegisterStudent(student) {
     personal_tasbihs:         student.personalTasbihs        || [],
   });
 
-  if (error) {
-    console.error('[db] registerStudent — Supabase write FAILED:', error);
-    return null;
+  if (insertError) {
+    console.error('[db] registerStudent — insert FAILED:', insertError);
+    throw new Error('INSERT_FAILED');
   }
 
-  console.log('[db] ✓ registerStudent — inserted into Supabase:', student.username);
+  console.log('[db] ✓ registerStudent — inserted:', student.username);
   return { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [], personalTasbihs: student.personalTasbihs || [] };
 }
 
