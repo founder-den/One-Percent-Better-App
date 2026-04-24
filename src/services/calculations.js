@@ -159,6 +159,34 @@ export function buildLeaderboard(students, activities, mode, options = {}) {
   return rows.map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+// ─── Challenge leaderboard (uses stored submission.points by period ID) ──────
+// Avoids recalculating from activities — reads what was written at submit time.
+// periodIds: array of period.id strings belonging to this challenge.
+export function buildChallengeLeaderboard(students, periodIds) {
+  const idSet = new Set(periodIds);
+  const eligible = students.filter(s => (s.status || 'active') === 'active');
+  const rows = eligible.map(s => {
+    const pts = (s.submissions || [])
+      .filter(sub => sub.periodId && idSet.has(sub.periodId))
+      .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
+    return {
+      id:         s.id,
+      fullName:   s.fullName,
+      username:   s.username,
+      avatar:     s.avatar || null,
+      points:     pts,
+      activeDays: getStudentActiveDays(s),
+      streak:     getStudentStreak(s),
+    };
+  });
+  rows.sort((a, b) => {
+    if (b.points     !== a.points)     return b.points     - a.points;
+    if (b.activeDays !== a.activeDays) return b.activeDays - a.activeDays;
+    return a.fullName.localeCompare(b.fullName);
+  });
+  return rows.map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
 // ─── Completed periods (for Hall of Fame) ─────────────────────────
 export function getCompletedPeriods(periods) {
   const today = todayString();

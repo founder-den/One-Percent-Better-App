@@ -82,16 +82,26 @@ export default function DashboardTab({ challenge, memberStudents }) {
   const alreadySubmitted = !!existingSub;
 
   // ── Stats ──────────────────────────────────────────────────────
-  // In challenge mode: total = points within challenge date range using challenge activities
-  const totalPts = isChallenge
-    ? (challenge.startDate && challenge.endDate
-        ? getStudentPeriodPoints(student, allActivities, challenge.startDate, challenge.endDate)
-        : getStudentTotalPoints(student, allActivities))
-    : getStudentTotalPoints(student, allActivities);
+  // In challenge mode: sum stored submission.points filtered by challenge period IDs
+  const totalPts = useMemo(() => {
+    if (isChallenge) {
+      const periodIds = new Set((challenge.periods || []).map(p => p.id));
+      return (student.submissions || [])
+        .filter(sub => sub.periodId && periodIds.has(sub.periodId))
+        .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
+    }
+    return getStudentTotalPoints(student, allActivities);
+  }, [isChallenge, challenge, student, allActivities]);
 
-  const periodPts = period
-    ? getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate)
-    : null;
+  const periodPts = useMemo(() => {
+    if (!period) return null;
+    if (isChallenge) {
+      return (student.submissions || [])
+        .filter(sub => sub.periodId === period.id)
+        .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
+    }
+    return getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate);
+  }, [isChallenge, period, student, allActivities]);
 
   const streak = getStudentStreak(student);
 
@@ -119,7 +129,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const ok = await submitDay(student.id, dateStr, ids, quote.trim());
+    const ok = await submitDay(student.id, dateStr, ids, quote.trim(), challenge?.id || null);
     if (!ok) { setErr('Failed to submit. Please try again.'); return; }
     setChecked({});
     setQuote('');
@@ -215,7 +225,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
             <p className="text-sm text-muted mt-3">
               Points earned:{' '}
               <span className="text-gold font-semibold">
-                {submissionPoints(existingSub, allActivities)}
+                {typeof existingSub.points === 'number' ? existingSub.points : submissionPoints(existingSub, allActivities)}
               </span>
             </p>
           </div>

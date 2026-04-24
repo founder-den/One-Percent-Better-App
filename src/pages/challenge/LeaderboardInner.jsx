@@ -8,6 +8,7 @@ import {
 import { formatDate } from '../../services/data.js';
 import {
   buildLeaderboard,
+  buildChallengeLeaderboard,
   getTodayQuotesForGroup,
 } from '../../services/calculations.js';
 
@@ -118,7 +119,7 @@ function GroupHallOfFameTab({ student, group, groupStudents, activities, periods
 // CHALLENGE-MODE inner tabs
 // challenge.periods is fetched fresh from Supabase by ChallengePage
 // ─────────────────────────────────────────────────────────────────
-function ChallengePeriodTab({ student, challenge, memberStudents, activities }) {
+function ChallengePeriodTab({ student, challenge, memberStudents }) {
   const periods = challenge.periods || [];
   const period  = periods.find(p => p.isActive);
 
@@ -134,10 +135,7 @@ function ChallengePeriodTab({ student, challenge, memberStudents, activities }) 
     );
   }
 
-  const lb = buildLeaderboard(memberStudents, activities, 'period', {
-    periodStart: period.startDate,
-    periodEnd:   period.endDate,
-  });
+  const lb = buildChallengeLeaderboard(memberStudents, [period.id]);
 
   return (
     <div>
@@ -152,7 +150,7 @@ function ChallengePeriodTab({ student, challenge, memberStudents, activities }) 
   );
 }
 
-function ChallengeAllTimeTab({ student, challenge, memberStudents, activities }) {
+function ChallengeAllTimeTab({ student, challenge, memberStudents }) {
   const periods = challenge.periods || [];
   const allTimePeriods = periods.filter(p => p.countForAllTime);
 
@@ -166,7 +164,7 @@ function ChallengeAllTimeTab({ student, challenge, memberStudents, activities })
     );
   }
 
-  const lb = buildLeaderboard(memberStudents, activities, 'alltime', { periods });
+  const lb = buildChallengeLeaderboard(memberStudents, allTimePeriods.map(p => p.id));
 
   return (
     <div>
@@ -179,17 +177,12 @@ function ChallengeAllTimeTab({ student, challenge, memberStudents, activities })
   );
 }
 
-function ChallengeHallOfFameTab({ student, challenge, memberStudents, activities }) {
+function ChallengeHallOfFameTab({ student, challenge, memberStudents }) {
   const allPeriods = challenge.periods || [];
   const [sel, setSel] = useState(allPeriods[0]?.id || '');
 
   const selPeriod = allPeriods.find(p => p.id === sel);
-  const lb = selPeriod
-    ? buildLeaderboard(memberStudents, activities, 'period', {
-        periodStart: selPeriod.startDate,
-        periodEnd:   selPeriod.endDate,
-      })
-    : [];
+  const lb = selPeriod ? buildChallengeLeaderboard(memberStudents, [selPeriod.id]) : [];
 
   if (!allPeriods.length) {
     return <EmptyState icon="📜" title="No periods yet" text="Periods will appear here once the admin creates them." />;
@@ -253,7 +246,7 @@ export default function LeaderboardInner({ challenge, memberStudents }) {
   // ── Data sources depending on mode ─────────────────────────────
   const group         = findGroupById(student.groupId);
   const groupStudents = isChallenge ? (memberStudents || []) : studentsForGroup(student.groupId);
-  const activities    = isChallenge ? (challenge.activities || []) : activitiesForGroup(student.groupId);
+  const activities    = isChallenge ? [] : activitiesForGroup(student.groupId);
   const groupPeriods  = isChallenge ? [] : periodsForGroup(student.groupId);
 
   // Quotes from the relevant student pool
@@ -281,7 +274,6 @@ export default function LeaderboardInner({ challenge, memberStudents }) {
               student={student}
               challenge={challenge}
               memberStudents={groupStudents}
-              activities={activities}
             />
           )}
           {activeTab === 'alltime' && (
@@ -289,7 +281,6 @@ export default function LeaderboardInner({ challenge, memberStudents }) {
               student={student}
               challenge={challenge}
               memberStudents={groupStudents}
-              activities={activities}
             />
           )}
           {activeTab === 'history' && (
@@ -297,7 +288,6 @@ export default function LeaderboardInner({ challenge, memberStudents }) {
               student={student}
               challenge={challenge}
               memberStudents={groupStudents}
-              activities={activities}
             />
           )}
         </>

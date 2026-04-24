@@ -144,23 +144,6 @@ function ActivityEditor({ activities, onUpdate, emptyText = 'No activities yet.'
   );
 }
 
-// ─── Activities sub-tab ───────────────────────────────────────────────
-function ChallengeActivitiesTab({ challenge, onUpdate }) {
-  const activities = challenge.activities || [];
-  return (
-    <div className="space-y-5">
-      <Card>
-        <SectionHeading>Activities ({activities.length})</SectionHeading>
-        <ActivityEditor
-          activities={activities}
-          onUpdate={updated => onUpdate({ activities: updated })}
-          emptyText="Add challenge-specific activities above."
-        />
-      </Card>
-    </div>
-  );
-}
-
 // ─── Periods sub-tab ──────────────────────────────────────────────────
 // Periods are stored in challenge.periods jsonb column.
 // Part 1: countForAllTime checkbox per period
@@ -374,28 +357,27 @@ function ChallengeMembersTab({ challenge, students, memberships, onReload }) {
 }
 
 // ─── isValidChallengeSub ──────────────────────────────────────────────
-// Returns true if a submission belongs to this challenge:
-// must fall in the date range AND contain at least one challenge activity ID.
-function isValidChallengeSub(sub, challenge, actIds) {
+// Returns true if a submission belongs to this challenge.
+// Uses period_id when available; falls back to date-range for legacy subs.
+function isValidChallengeSub(sub, challenge) {
   if (!sub.date) return false;
   if (challenge.startDate && sub.date < challenge.startDate) return false;
   if (challenge.endDate   && sub.date > challenge.endDate)   return false;
-  const ids = sub.completedActivities || [];
-  return ids.some(ca => actIds.has(typeof ca === 'string' ? ca : ca?.id));
+  const periodIds = new Set((challenge.periods || []).map(p => p.id));
+  if (sub.periodId) return periodIds.has(sub.periodId);
+  // Legacy: no period_id recorded — include if date is in range
+  return true;
 }
 
 // ─── Points for a challenge submission ───────────────────────────────
-// Respects scoreOverride. Falls back to period activities, then challenge activities.
+// Priority: scoreOverride → stored sub.points → recalculate from period activities.
 function challengeSubPoints(sub, challenge) {
   if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
+  if (typeof sub.points        === 'number') return sub.points;
 
-  // Find which period the submission date falls in (if any)
-  const periods = challenge.periods || [];
-  const period  = periods.find(p => sub.date >= p.startDate && sub.date <= p.endDate);
-  const acts    = (period && (period.activities || []).length > 0)
-    ? period.activities
-    : (challenge.activities || []);
-
+  // Fallback: recalculate from the period's activities (never challenge.activities)
+  const period = (challenge.periods || []).find(p => sub.date >= p.startDate && sub.date <= p.endDate);
+  const acts   = period?.activities || [];
   return (sub.completedActivities || []).reduce((sum, ca) => {
     const actId = typeof ca === 'string' ? ca : ca?.id;
     const act   = acts.find(a => a.id === actId);
@@ -410,12 +392,14 @@ function ChallengeDataTab({ challenge, students, memberships }) {
     .map(m => m.studentId);
 
   const memberStudents = students.filter(s => memberIds.includes(s.id));
-  const activities     = challenge.activities || [];
-  const actIds         = new Set(activities.map(a => a.id));
+
+  // Collect all activities across all periods (for display/stats only)
+  const allPeriodActivities = (challenge.periods || []).flatMap(p => p.activities || []);
+  const activities = allPeriodActivities.length > 0 ? allPeriodActivities : (challenge.activities || []);
 
   const allSubs = memberStudents.flatMap(s =>
     (s.submissions || [])
-      .filter(sub => isValidChallengeSub(sub, challenge, actIds))
+      .filter(sub => isValidChallengeSub(sub, challenge))
       .map(sub => ({ ...sub, studentId: s.id }))
   );
 
@@ -517,8 +501,9 @@ function ChallengeSubmissionsTab({ challenge, students, memberships, onReload })
 
   const memberIds      = memberships.filter(m => m.challengeId === challenge.id).map(m => m.studentId);
   const memberStudents = students.filter(s => memberIds.includes(s.id));
-  const activities     = challenge.activities || [];
-  const actIds         = new Set(activities.map(a => a.id));
+  // Collect activities across all periods for the edit checklist
+  const allPeriodActivities = (challenge.periods || []).flatMap(p => p.activities || []);
+  const activities = allPeriodActivities.length > 0 ? allPeriodActivities : (challenge.activities || []);
 
   const [filterStudent, setFilterStudent] = useState('');
   const [filterStart,   setFilterStart]   = useState('');
@@ -531,7 +516,7 @@ function ChallengeSubmissionsTab({ challenge, students, memberships, onReload })
   const allSubs = memberStudents
     .flatMap(s =>
       (s.submissions || [])
-        .filter(sub => isValidChallengeSub(sub, challenge, actIds))
+        .filter(sub => isValidChallengeSub(sub, challenge))
         .map(sub => ({
           ...sub,
           studentId:   s.id,
@@ -745,7 +730,6 @@ function ChallengeSubmissionsTab({ challenge, students, memberships, onReload })
 }
 
 const DETAIL_TABS = [
-  { key: 'activities',  label: 'Activities' },
   { key: 'periods',     label: 'Periods' },
   { key: 'members',     label: 'Members' },
   { key: 'data',        label: 'Data' },
@@ -754,7 +738,7 @@ const DETAIL_TABS = [
 
 export default function ChallengeDetailView({ challengeId, onBack }) {
   const { challenges, challengeMemberships, students, updateChallenge, reload } = useApp();
-  const [activeTab, setActiveTab] = useState('activities');
+  const [activeTab, setActiveTab] = useState('periods');
 
   const challenge = challenges.find(c => c.id === challengeId);
 
@@ -792,12 +776,6 @@ export default function ChallengeDetailView({ challengeId, onBack }) {
 
       <Tabs tabs={DETAIL_TABS} active={activeTab} onChange={setActiveTab} />
 
-      {activeTab === 'activities' && (
-        <ChallengeActivitiesTab
-          challenge={challenge}
-          onUpdate={handleUpdate}
-        />
-      )}
       {activeTab === 'periods' && (
         <ChallengePeriodsTab
           challenge={challenge}

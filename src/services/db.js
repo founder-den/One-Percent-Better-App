@@ -298,6 +298,23 @@ export async function loadAll() {
     if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
+  // RLS diagnostic: log raw counts and any empty results that could signal policy blocks
+  console.log('[db] loadAll — raw counts:', {
+    students:   studentRows?.length   ?? 'ERROR',
+    submissions: submissionRows?.length ?? 'ERROR',
+    periods:    periodRows?.length    ?? 'ERROR',
+    challenges: challengeRows?.length ?? 'ERROR',
+  });
+  if (periodRows?.length === 0 && !e7) {
+    console.warn('[db] loadAll — periods returned 0 rows with no error. Likely RLS block. Check Supabase → Authentication → Policies → periods table.');
+  }
+  if (submissionRows?.length === 0 && !e2) {
+    console.warn('[db] loadAll — submissions returned 0 rows with no error. Possible RLS block on submissions table.');
+  }
+  if (periodRows?.length > 0) {
+    console.log('[db] loadAll — first period sample:', periodRows[0]);
+  }
+
   const subsByStudent = {};
   (submissionRows || []).forEach(r => {
     if (!subsByStudent[r.student_id]) subsByStudent[r.student_id] = [];

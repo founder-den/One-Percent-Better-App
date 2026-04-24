@@ -127,15 +127,29 @@ export default function StudentsTab({ groupId }) {
     const checked = {};
     (sub.completedActivities || []).forEach(id => { checked[id] = true; });
     setEditChecked(checked);
-    const matchedChallenge = challenges.find(
-      c => c.startDate && c.endDate && sub.date >= c.startDate && sub.date <= c.endDate
-    );
-    setEditModal({ student: st, sub, challenge: matchedChallenge || null });
+    // Find period activities: prefer sub.periodId, fall back to date-range match across challenges
+    let periodActivities = [];
+    if (sub.periodId) {
+      for (const ch of challenges) {
+        const pd = (ch.periods || []).find(p => p.id === sub.periodId);
+        if (pd) { periodActivities = pd.activities || []; break; }
+      }
+    }
+    if (!periodActivities.length) {
+      const matchedCh = challenges.find(
+        c => c.startDate && c.endDate && sub.date >= c.startDate && sub.date <= c.endDate
+      );
+      if (matchedCh) {
+        const pd = (matchedCh.periods || []).find(p => sub.date >= p.startDate && sub.date <= p.endDate);
+        periodActivities = pd?.activities || [];
+      }
+    }
+    setEditModal({ student: st, sub, periodActivities });
   }
   function saveEdit() {
-    const acts = editModal.challenge?.activities || [];
+    const acts = editModal.periodActivities || [];
     const ids = acts.filter(a => editChecked[a.id]).map(a => a.id);
-    const scoreOverride = editModal.challenge
+    const scoreOverride = acts.length > 0
       ? acts.filter(a => editChecked[a.id]).reduce((sum, a) => sum + Number(a.points || 0), 0)
       : undefined;
     editSubmission(editModal.student.id, editModal.sub.date, ids, scoreOverride);
@@ -625,10 +639,10 @@ export default function StudentsTab({ groupId }) {
       >
         {editModal && (
           <div className="space-y-1">
-            {(!editModal.challenge || (editModal.challenge.activities || []).length === 0) && (
+            {(editModal.periodActivities || []).length === 0 && (
               <p className="text-sm text-muted">No activities found for this submission.</p>
             )}
-            {(editModal.challenge?.activities || []).map(a => (
+            {(editModal.periodActivities || []).map(a => (
               <ChecklistItem
                 key={a.id}
                 activity={a}

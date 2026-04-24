@@ -5,50 +5,19 @@ import {
 } from '../../components/ui.jsx';
 import ChallengeDetailView from './ChallengeDetailView.jsx';
 
-// ─── Activity row editor (challenge-specific activities) ──────────
-function ActivityRow({ act, onChange, onDelete }) {
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        value={act.name}
-        onChange={e => onChange({ ...act, name: e.target.value })}
-        placeholder="Activity name"
-        className="flex-1 bg-bg-card2 border border-border rounded-lg px-3 py-1.5 text-sm text-primary outline-none focus:border-gold"
-      />
-      <input
-        type="number"
-        min="1"
-        value={act.points}
-        onChange={e => onChange({ ...act, points: Number(e.target.value) })}
-        placeholder="Pts"
-        className="w-20 bg-bg-card2 border border-border rounded-lg px-3 py-1.5 text-sm text-primary outline-none focus:border-gold"
-      />
-      <button
-        onClick={onDelete}
-        className="text-danger text-sm px-2 hover:opacity-70 transition-opacity"
-      >✕</button>
-    </div>
-  );
-}
-
 // ─── Challenge form (create / edit) ──────────────────────────────
 function ChallengeForm({ initial, groups, onSave, onCancel, saving, saveErr }) {
-  const [name,           setName]          = useState(initial?.name           || '');
-  const [description,    setDescription]   = useState(initial?.description    || '');
-  const [startDate,      setStartDate]     = useState(initial?.startDate      || '');
-  const [endDate,        setEndDate]       = useState(initial?.endDate        || '');
-  const [isPrivate,      setIsPrivate]     = useState(initial?.isPrivate      ?? false);
-  const [code,           setCode]          = useState(initial?.code           || '');
-  const [isVisible,      setIsVisible]     = useState(initial?.isVisible      ?? false);
-  const [visGroups,      setVisGroups]     = useState(initial?.visibleToGroups || []);
-  const [activities,     setActivities]    = useState(initial?.activities     || []);
+  const [name,        setName]        = useState(initial?.name           || '');
+  const [description, setDescription] = useState(initial?.description    || '');
+  const [startDate,   setStartDate]   = useState(initial?.startDate      || '');
+  const [endDate,     setEndDate]     = useState(initial?.endDate        || '');
+  const [isPrivate,   setIsPrivate]   = useState(initial?.isPrivate      ?? false);
+  const [code,        setCode]        = useState(initial?.code           || '');
+  const [isVisible,   setIsVisible]   = useState(initial?.isVisible      ?? false);
+  const [visGroups,   setVisGroups]   = useState(initial?.visibleToGroups || []);
 
   function toggleVisGroup(gid) {
     setVisGroups(v => v.includes(gid) ? v.filter(x => x !== gid) : [...v, gid]);
-  }
-
-  function addActivity() {
-    setActivities(a => [...a, { id: `act_${Date.now()}`, name: '', points: 10 }]);
   }
 
   function submit() {
@@ -62,7 +31,6 @@ function ChallengeForm({ initial, groups, onSave, onCancel, saving, saveErr }) {
       code:            isPrivate ? code.trim() || null : null,
       isVisible,
       visibleToGroups: isVisible ? visGroups : [],
-      activities,
     });
   }
 
@@ -140,24 +108,6 @@ function ChallengeForm({ initial, groups, onSave, onCancel, saving, saveErr }) {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Activities */}
-      <div>
-        <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">
-          Challenge Activities
-        </p>
-        <div className="space-y-2 mb-2">
-          {activities.map((act, i) => (
-            <ActivityRow
-              key={act.id || i}
-              act={act}
-              onChange={updated => setActivities(a => a.map((x, j) => j === i ? updated : x))}
-              onDelete={() => setActivities(a => a.filter((_, j) => j !== i))}
-            />
-          ))}
-        </div>
-        <Button size="sm" variant="ghost" onClick={addActivity}>+ Add Activity</Button>
       </div>
 
       <div className="flex gap-2 pt-1">

@@ -275,10 +275,27 @@ export function AppProvider({ children }) {
     setStudents(s => s.map(st => st.id === id ? { ...st, status: 'active' } : st));
   }, []);
 
-  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote) => {
-    console.log('[AppContext] submitDay:', { studentId, dateStr });
-    const student = students.find(s => s.id === studentId);
-    const activePd = student ? periods.find(p => p.groupId === student.groupId && p.isActive) : null;
+  const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote, challengeId = null) => {
+    console.log('[AppContext] submitDay:', { studentId, dateStr, challengeId });
+    const st = students.find(s => s.id === studentId);
+
+    let activePd = null;
+
+    if (challengeId) {
+      // Challenge mode: find the active period within this challenge
+      const ch = challenges.find(c => c.id === challengeId);
+      activePd = ch ? ((ch.periods || []).find(p => p.isActive) || null) : null;
+      console.log('[AppContext] submitDay — challenge period:', activePd?.id || 'NONE', '| activities:', activePd?.activities?.length ?? 0);
+      if (!activePd) {
+        console.error('[AppContext] submitDay — no active period found for challenge', challengeId, '— aborting, will not save null points');
+        return null;
+      }
+    } else {
+      // Group mode: find the active period for this student's group
+      activePd = st ? periods.find(p => p.groupId === st.groupId && p.isActive) : null;
+      console.log('[AppContext] submitDay — group period:', activePd?.id || 'none', '| activities:', activePd?.activities?.length ?? 0);
+    }
+
     const points = activePd
       ? (completedActivities || []).reduce((sum, ca) => {
           const actId = typeof ca === 'string' ? ca : ca?.id;
@@ -286,6 +303,12 @@ export function AppProvider({ children }) {
           return sum + Number(act?.points || 0);
         }, 0)
       : null;
+
+    console.log('[AppContext] submitDay — inserting:', {
+      studentId, dateStr, points, periodId: activePd?.id || null,
+      completedCount: (completedActivities || []).length,
+    });
+
     const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points, activePd?.id || null);
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
     const sub = {
@@ -298,7 +321,7 @@ export function AppProvider({ children }) {
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));
     return students.find(st => st.id === studentId) || null;
-  }, [students, periods]);
+  }, [students, periods, challenges]);
 
   const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });

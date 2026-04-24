@@ -44,13 +44,6 @@ export default function HistoryTab({ challenge }) {
 
   const isChallenge = !!challenge;
 
-  const allActivities = isChallenge
-    ? (challenge.activities || [])
-    : activitiesForGroup(student.groupId);
-  const activities = isChallenge
-    ? allActivities.filter(a => a.isActive ?? true)
-    : allActivities.filter(a => a.isActive ?? a.active ?? true);
-
   const period     = isChallenge
     ? ((challenge.periods || []).find(p => p.isActive) || null)
     : activePeriod(student.groupId);
@@ -68,12 +61,11 @@ export default function HistoryTab({ challenge }) {
       .filter(p => !p.isActive)
       .sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''))
       .forEach(p => opts.push({ value: `period_${p.id}`, label: p.name, periodObj: p }));
-    // In challenge mode with no periods, offer the full challenge date range instead
     if (isChallenge && !allPeriods.length && challenge.startDate && challenge.endDate) {
       opts.push({
         value: 'challenge_range',
         label: 'Challenge Period',
-        periodObj: { startDate: challenge.startDate, endDate: challenge.endDate },
+        periodObj: { startDate: challenge.startDate, endDate: challenge.endDate, activities: [] },
       });
     }
     opts.push({ value: 'last14', label: 'Last 14 Days', periodObj: null });
@@ -84,6 +76,14 @@ export default function HistoryTab({ challenge }) {
 
   const selOption = periodOptions.find(o => o.value === selValue) || periodOptions[0];
 
+  // In challenge mode activities come from the selected period (not challenge.activities)
+  const allActivities = isChallenge
+    ? (selOption?.periodObj?.activities || [])
+    : activitiesForGroup(student.groupId);
+  const activities = isChallenge
+    ? allActivities.filter(a => a.isActive ?? true)
+    : allActivities.filter(a => a.isActive ?? a.active ?? true);
+
   // Choose date columns based on selection
   const dates = useMemo(() => {
     if (!selOption || !selOption.periodObj) return lastNDays(14);
@@ -92,28 +92,36 @@ export default function HistoryTab({ challenge }) {
   }, [selOption]);
 
   // Build lookup: date → completedActivities set
-  // In challenge mode, skip submissions that contain no challenge activity IDs
-  // (these are old group-level submissions that don't belong to this challenge).
+  // In challenge mode, only include submissions whose period_id belongs to this challenge.
   const subMap = useMemo(() => {
     const m = {};
-    const challengeActIds = isChallenge
-      ? new Set((challenge.activities || []).map(a => a.id))
+    const challengePeriodIds = isChallenge
+      ? new Set((challenge.periods || []).map(p => p.id))
       : null;
     (student.submissions || []).forEach(s => {
-      if (challengeActIds) {
-        const ids = s.completedActivities || [];
-        const valid = ids.some(ca => challengeActIds.has(typeof ca === 'string' ? ca : ca?.id));
-        if (!valid) return;
+      if (challengePeriodIds) {
+        if (!s.periodId || !challengePeriodIds.has(s.periodId)) return;
       }
       m[s.date] = new Set(s.completedActivities || []);
     });
     return m;
   }, [student, isChallenge, challenge]);
 
-  // Summary stats
-  const totalPts  = getStudentTotalPoints(student, allActivities);
+  // Summary stats — challenge mode uses stored submission.points by period_id
+  const totalPts = isChallenge
+    ? (() => {
+        const periodIds = new Set((challenge.periods || []).map(p => p.id));
+        return (student.submissions || [])
+          .filter(sub => sub.periodId && periodIds.has(sub.periodId))
+          .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
+      })()
+    : getStudentTotalPoints(student, allActivities);
   const periodPts = period
-    ? getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate)
+    ? (isChallenge
+        ? (student.submissions || [])
+            .filter(sub => sub.periodId === period.id)
+            .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0)
+        : getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate))
     : null;
   // In challenge mode derive active days from the filtered subMap so old
   // group submissions don't inflate the count.
