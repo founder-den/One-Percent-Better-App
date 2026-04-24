@@ -5,7 +5,6 @@ import { useApp }  from '../../context/AppContext.jsx';
 import { Alert, Button, Input, PasswordInput, Tabs } from '../../components/ui.jsx';
 import { AppLogo } from '../../components/Navbar.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
-import { dbRegisterStudent } from '../../services/db.js';
 import HomeTab    from './HomeTab.jsx';
 import ProfileTab from './ProfileTab.jsx';
 
@@ -49,13 +48,14 @@ function LoginForm({ onShowRegister }) {
     if (username.trim() === adminUsername && password === adminPassword) {
       loginAdmin();
       navigate('/admin', { replace: true });
-      return;
+      return; // component navigates away, loading state is irrelevant
     }
 
     try {
       await loginStudent(username.trim(), password);
     } catch (err) {
       setError('Incorrect username or password.');
+    } finally {
       setLoading(false);
     }
   }
@@ -94,7 +94,7 @@ function LoginForm({ onShowRegister }) {
 }
 
 function RegisterForm({ onShowLogin }) {
-  const { loginStudent }              = useAuth();
+  const { loginStudentDirectly }      = useAuth();
   const { students, findGroupByCode, registerStudent, registrationMode } = useApp();
   const [form, setForm]               = useState({ fullName: '', username: '', password: '', code: '' });
   const [errors, setErrors]           = useState({});
@@ -138,15 +138,17 @@ function RegisterForm({ onShowLogin }) {
 
     const status = registrationMode === 'approval' ? 'pending' : 'active';
     try {
-      await dbRegisterStudent({ ...form, groupId: grp.id, status });
-      window.location.reload(); // AuthContext grabs new session + students array
+      const newStudent = await registerStudent(
+        { fullName: form.fullName, username: form.username, password: form.password },
+        grp.id,
+        status
+      );
+      if (!newStudent) throw new Error('Registration failed. Please try again.');
+      loginStudentDirectly(newStudent.username);
     } catch (err) {
-      setLoading(false);
       const code = err.message || '';
       if (code === 'USERNAME_TAKEN') {
         setErrors({ username: 'Username already taken. Please choose a different one.' });
-      } else if (code === 'AUTH_USER_EXISTS') {
-        setErrors({ username: 'An account with this username already exists. Please sign in instead.' });
       } else if (code === 'INVALID_GROUP') {
         setErrors({ code: 'Invalid group code. Please check and try again.' });
       } else if (code === 'GROUP_INACTIVE') {
@@ -154,6 +156,8 @@ function RegisterForm({ onShowLogin }) {
       } else {
         setErrors({ code: `Registration failed: ${code || 'Unknown error'}` });
       }
+    } finally {
+      setLoading(false);
     }
   }
 

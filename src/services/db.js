@@ -30,6 +30,7 @@ function mapStudent(row, submissions = [], bonusPoints = [], books = [], program
     id:                     row.id,
     fullName:               row.full_name || '',
     username:               row.username,
+    password:               row.password || '',
     groupId:                row.group_id,
     secondaryGroupIds:      row.secondary_group_ids || [],
     status:                 row.status,
@@ -538,15 +539,14 @@ export async function dbActivatePeriod(id, groupId) {
 
 // ─── STUDENTS ─────────────────────────────────────────────────────
 // Throws descriptive Error codes so callers can show the right message:
-//   USERNAME_TAKEN   — username already in students table
-//   AUTH_USER_EXISTS — Supabase Auth already has this email
-//   INVALID_GROUP    — groupId not found in groups table
-//   GROUP_INACTIVE   — group exists but is not active
-//   INSERT_FAILED    — students row insert failed
+//   USERNAME_TAKEN — username already in students table
+//   INVALID_GROUP  — groupId not found in groups table
+//   GROUP_INACTIVE — group exists but is not active
+//   INSERT_FAILED  — students row insert failed
 export async function dbRegisterStudent(student) {
   console.log('[db] registerStudent:', student.username);
 
-  // 1. Check username availability in the students table before touching auth
+  // 1. Check username availability
   const { data: existingUser, error: userCheckError } = await supabase
     .from('students')
     .select('id')
@@ -558,7 +558,7 @@ export async function dbRegisterStudent(student) {
     throw new Error('USERNAME_TAKEN');
   }
 
-  // 2. Verify the group exists and is active in the DB
+  // 2. Verify the group exists and is active
   if (student.groupId) {
     const { data: group, error: groupError } = await supabase
       .from('groups')
@@ -570,27 +570,13 @@ export async function dbRegisterStudent(student) {
     if (!group.is_active) throw new Error('GROUP_INACTIVE');
   }
 
-  // 3. Register with Supabase Auth
-  const email = `${student.username.trim().toLowerCase().replace(/\s+/g, '')}@1percentbetter.app`;
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password: student.password,
-  });
-
-  if (authError) {
-    console.error('[db] registerStudent — Auth FAILED:', authError);
-    const msg = (authError.message || '').toLowerCase();
-    if (msg.includes('already registered') || msg.includes('user already')) {
-      throw new Error('AUTH_USER_EXISTS');
-    }
-    throw new Error(authError.message || 'AUTH_FAILED');
-  }
-
-  // 4. Insert the student data using the new secure Auth UUID
+  // 3. Insert directly into students table — no Supabase Auth involved
+  const id = student.id || generateId();
   const { error: insertError } = await supabase.from('students').insert({
-    id:                       authData.user.id,
+    id,
     full_name:                student.fullName,
     username:                 student.username,
+    password:                 student.password || '',
     group_id:                 student.groupId,
     secondary_group_ids:      student.secondaryGroupIds || [],
     status:                   student.status,
@@ -608,7 +594,7 @@ export async function dbRegisterStudent(student) {
   }
 
   console.log('[db] ✓ registerStudent — inserted:', student.username);
-  return { ...student, submissions: [], bonusPoints: [], books: [], programCompletions: [], personalTasbihs: student.personalTasbihs || [] };
+  return { ...student, id, submissions: [], bonusPoints: [], books: [], programCompletions: [], personalTasbihs: student.personalTasbihs || [] };
 }
 
 export async function dbUpdateStudent(id, fields) {
