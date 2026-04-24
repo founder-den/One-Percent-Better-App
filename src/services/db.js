@@ -281,7 +281,7 @@ export async function loadAll() {
     supabase.from('books').select('*'),
     supabase.from('program_completions').select('*'),
     supabase.from('activities').select('*'),
-    supabase.from('periods').select('*'),
+    supabase.from('periods').select('id, group_id, name, start_date, end_date, is_active, count_for_all_time, prize_text, activities'),
     supabase.from('global_tasbihs').select('*'),
     supabase.from('personal_tasbih_templates').select('*'),
     supabase.from('programs').select('*'),
