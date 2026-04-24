@@ -127,12 +127,18 @@ export default function StudentsTab({ groupId }) {
     const checked = {};
     (sub.completedActivities || []).forEach(id => { checked[id] = true; });
     setEditChecked(checked);
-    setEditModal({ student: st, sub, activities: getActivitiesForSub(sub, st.id) });
+    const matchedChallenge = challenges.find(
+      c => c.startDate && c.endDate && sub.date >= c.startDate && sub.date <= c.endDate
+    );
+    setEditModal({ student: st, sub, challenge: matchedChallenge || null });
   }
   function saveEdit() {
-    const acts = editModal.activities || groupActs;
+    const acts = editModal.challenge?.activities || [];
     const ids = acts.filter(a => editChecked[a.id]).map(a => a.id);
-    editSubmission(editModal.student.id, editModal.sub.date, ids);
+    const scoreOverride = editModal.challenge
+      ? acts.filter(a => editChecked[a.id]).reduce((sum, a) => sum + Number(a.points || 0), 0)
+      : undefined;
+    editSubmission(editModal.student.id, editModal.sub.date, ids, scoreOverride);
     setEditModal(null);
   }
 
@@ -619,10 +625,10 @@ export default function StudentsTab({ groupId }) {
       >
         {editModal && (
           <div className="space-y-1">
-            {(editModal.activities || groupActs).length === 0 && (
+            {(!editModal.challenge || (editModal.challenge.activities || []).length === 0) && (
               <p className="text-sm text-muted">No activities found for this submission.</p>
             )}
-            {(editModal.activities || groupActs).map(a => (
+            {(editModal.challenge?.activities || []).map(a => (
               <ChecklistItem
                 key={a.id}
                 activity={a}
