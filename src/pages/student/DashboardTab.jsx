@@ -47,7 +47,7 @@ function getWeekDays() {
 // ─────────────────────────────────────────────────────────────────
 export default function DashboardTab({ challenge, memberStudents }) {
   const { student, refreshStudent } = useAuth();
-  const { activitiesForGroup, activePeriod, studentsForGroup, submitDay } = useApp();
+  const { activePeriod, studentsForGroup, submitDay } = useApp();
 
   const [dayMode, setDayMode] = useState('today');
   const [checked, setChecked] = useState({});
@@ -63,15 +63,12 @@ export default function DashboardTab({ challenge, memberStudents }) {
     : activePeriod(student.groupId);
 
   // ── Activities ──────────────────────────────────────────────────
-  // In challenge mode, activities come exclusively from the active period.
-  // Never fall back to challenge.activities or global activities.
-  const allActivities = isChallenge
-    ? (period?.activities || [])
-    : activitiesForGroup(student.groupId);
+  // Activities always come from the active period — challenge or regular.
+  const allActivities = period?.activities || [];
 
   const activities = isChallenge
     ? allActivities.filter(a => a.isActive ?? true)
-    : allActivities.filter(a => a.isActive ?? a.active ?? true);
+    : allActivities.filter(a => a.is_active !== false);
 
   // ── Student pool (for rank) ─────────────────────────────────────
   const groupStudents = isChallenge
@@ -225,9 +222,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
         ) : (
           <div>
             {activities.length === 0 && (
-              isChallenge
-                ? <EmptyState icon="📋" title="No activities available yet" text="This challenge has no active period with activities." />
-                : <EmptyState icon="📋" title="No activities" text="Ask your admin to add activities to your group." />
+              <EmptyState icon="📋" title="No activities available yet" text={isChallenge ? "This challenge has no active period with activities." : "No active period with activities has been set up yet."} />
             )}
             {activities.map(a => (
               <ChecklistItem

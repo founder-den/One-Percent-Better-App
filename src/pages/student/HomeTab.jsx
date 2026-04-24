@@ -387,7 +387,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     return activities;
   }
 
-  const totalPoints = useMemo(() => getStudentGrandTotal(s, s.submissions || [], challenges), [s, challenges]);
+  const totalPoints = useMemo(() => getStudentGrandTotal(s, s.submissions || []), [s]);
 
   const pointsBreakdown = useMemo(() => {
     const myMemberships = challengeMemberships.filter(m => m.studentId === s.id);
@@ -535,7 +535,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
 
 // ─── Community student card ────────────────────────────────────────
 function CommunityStudentCard({ s, earnedBadges, challenges, onClick }) {
-  const totalPoints   = getStudentGrandTotal(s, s.submissions || [], challenges);
+  const totalPoints   = getStudentGrandTotal(s, s.submissions || []);
   const currentStreak = getStudentStreak(s);
   const topBadges     = BADGE_DEFS.filter(d => earnedBadges.has(d.id)).slice(0, 2);
   const [hovered, setHovered] = useState(false);
@@ -713,7 +713,7 @@ export default function HomeTab({ onEditProfile }) {
   const allStudentBadges = useMemo(() => {
     const sorted = [...students]
       .filter(s => (s.status || 'active') === 'active')
-      .sort((a, b) => getStudentGrandTotal(b, b.submissions || [], challenges) - getStudentGrandTotal(a, a.submissions || [], challenges));
+      .sort((a, b) => getStudentGrandTotal(b, b.submissions || []) - getStudentGrandTotal(a, a.submissions || []));
     const ranks = {};
     sorted.forEach((s, i) => { ranks[s.id] = i + 1; });
 
@@ -722,7 +722,7 @@ export default function HomeTab({ onEditProfile }) {
       map[s.id] = computeEarnedBadges(s, activities, students, groupActivities, groupPeriods, ranks);
     });
     return map;
-  }, [groupStudents, activities, students, groupActivities, groupPeriods, challenges]);
+  }, [groupStudents, activities, students, groupActivities, groupPeriods]);
 
   // Badge rarity: how many group students earned each badge
   const badgeCounts = useMemo(() => {
@@ -760,8 +760,8 @@ export default function HomeTab({ onEditProfile }) {
 
   // ── Community students (same group, sorted by points) ───────────
   const communityStudents = useMemo(
-    () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, b.submissions || [], challenges) - getStudentGrandTotal(a, a.submissions || [], challenges)),
-    [groupStudents, challenges]
+    () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, b.submissions || []) - getStudentGrandTotal(a, a.submissions || [])),
+    [groupStudents]
   );
 
   function handleDismiss(id) {

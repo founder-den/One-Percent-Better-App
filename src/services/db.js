@@ -53,6 +53,7 @@ function mapSubmission(row) {
     date:                row.date,
     completedActivities: row.completed_activities || [],
     points:              typeof row.points === 'number' ? row.points : null,
+    periodId:            row.period_id || null,
     quote:               row.quote || '',
     quoteLikes:          row.quote_likes || [],
     ...(typeof row.score_override === 'number' ? { scoreOverride: row.score_override } : {}),
@@ -100,6 +101,7 @@ function mapPeriod(row) {
     isActive:        row.is_active,
     countForAllTime: row.count_for_all_time,
     prizeText:       row.prize_text || '',
+    activities:      row.activities || [],
   };
 }
 
@@ -475,6 +477,7 @@ export async function dbAddPeriod(period) {
     is_active:          period.isActive          ?? false,
     count_for_all_time: period.countForAllTime   ?? false,
     prize_text:         period.prizeText         || '',
+    activities:         period.activities        || [],
   });
   if (error) { console.error('[db] addPeriod — Supabase write FAILED:', error); return null; }
   return period;
@@ -489,6 +492,7 @@ export async function dbUpdatePeriod(id, fields) {
   if (fields.isActive         !== undefined) row.is_active          = fields.isActive;
   if (fields.countForAllTime  !== undefined) row.count_for_all_time = fields.countForAllTime;
   if (fields.prizeText        !== undefined) row.prize_text         = fields.prizeText;
+  if (fields.activities       !== undefined) row.activities         = fields.activities;
 
   const { error } = await supabase.from('periods').update(row).eq('id', id);
   if (error) { console.error('[db] updatePeriod — Supabase write FAILED:', error); return false; }
@@ -582,7 +586,7 @@ export async function dbDeleteStudent(id) {
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points, periodId) {
   console.log('[db] submitDay:', studentId, dateStr);
   const { data: existing } = await supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
   if (existing) { console.log('Submission already exists for this date'); return true; }
@@ -593,6 +597,7 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     date:                 dateStr,
     completed_activities: completedActivities,
     points:               typeof points === 'number' ? points : null,
+    period_id:            periodId || null,
     quote:                quote || '',
     quote_likes:          [],
   });

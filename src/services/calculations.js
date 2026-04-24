@@ -61,19 +61,10 @@ function bonusBetween(student, start, end) {
     .reduce((sum, b) => sum + Number(b.points || 0), 0);
 }
 
-// ─── Grand total: all challenge submissions + bonus points ────────────
-export function getStudentGrandTotal(student, submissions, challenges) {
+// ─── Grand total: sum stored submission.points + bonus points ─────────
+export function getStudentGrandTotal(student, submissions) {
   const subPts = (submissions || []).reduce((sum, sub) => {
-    if (typeof sub.points === 'number') return sum + sub.points;
-    // Fallback for legacy submissions without stored points
-    const ch = (challenges || []).find(c => c.startDate && c.endDate && sub.date >= c.startDate && sub.date <= c.endDate);
-    if (!ch) return sum;
-    const chPts = (sub.completedActivities || []).reduce((s, ca) => {
-      const actId = typeof ca === 'string' ? ca : ca?.id;
-      const act = (ch.activities || []).find(a => a.id === actId);
-      return s + Number(act?.points || 0);
-    }, 0);
-    return sum + chPts;
+    return sum + (typeof sub.points === 'number' ? sub.points : 0);
   }, 0);
   const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
   return subPts + bonusPts;

@@ -277,19 +277,19 @@ export function AppProvider({ children }) {
 
   const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote) => {
     console.log('[AppContext] submitDay:', { studentId, dateStr });
-    const challenge = challenges.find(c => c.startDate && c.endDate && dateStr >= c.startDate && dateStr <= c.endDate);
-    let points = null;
-    if (challenge) {
-      points = (completedActivities || []).reduce((sum, ca) => {
-        const actId = typeof ca === 'string' ? ca : ca?.id;
-        const act = (challenge.activities || []).find(a => a.id === actId);
-        return sum + Number(act?.points || 0);
-      }, 0);
-    }
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points);
+    const student = students.find(s => s.id === studentId);
+    const activePd = student ? periods.find(p => p.groupId === student.groupId && p.isActive) : null;
+    const points = activePd
+      ? (completedActivities || []).reduce((sum, ca) => {
+          const actId = typeof ca === 'string' ? ca : ca?.id;
+          const act = (activePd.activities || []).find(a => a.id === actId);
+          return sum + Number(act?.points || 0);
+        }, 0)
+      : null;
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points, activePd?.id || null);
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
     const sub = {
-      date: dateStr, completedActivities, quote: quote || '', quoteLikes: []
+      date: dateStr, completedActivities, points, periodId: activePd?.id || null, quote: quote || '', quoteLikes: [],
     };
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
@@ -298,7 +298,7 @@ export function AppProvider({ children }) {
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));
     return students.find(st => st.id === studentId) || null;
-  }, [students, challenges]);
+  }, [students, periods]);
 
   const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });
@@ -456,7 +456,7 @@ export function AppProvider({ children }) {
   // ── Periods ───────────────────────────────────────────────────
   const addPeriod = useCallback(async (groupId, name, startDate, endDate) => {
     console.log('[AppContext] addPeriod:', { groupId, name });
-    const period = { id: generateId(), groupId, name, startDate, endDate, isActive: false, countForAllTime: false, prizeText: '' };
+    const period = { id: generateId(), groupId, name, startDate, endDate, isActive: false, countForAllTime: false, prizeText: '', activities: [] };
     const confirmed = await dbAddPeriod(period);
     if (!confirmed) { console.error('[AppContext] addPeriod failed — state NOT updated'); return; }
     setPeriods(p => [...p, confirmed]);
