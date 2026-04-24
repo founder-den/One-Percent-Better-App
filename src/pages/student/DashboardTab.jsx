@@ -57,20 +57,21 @@ export default function DashboardTab({ challenge, memberStudents }) {
   const isChallenge = !!challenge;
   const dateStr     = dayMode === 'today' ? todayString() : yesterdayString();
 
+  // ── Period ──────────────────────────────────────────────────────
+  const period = isChallenge
+    ? ((challenge.periods || []).find(p => p.isActive) || null)
+    : activePeriod(student.groupId);
+
   // ── Activities ──────────────────────────────────────────────────
-  // allActivities used for point calculations; activities used for the form
+  // In challenge mode, activities come exclusively from the active period.
+  // Never fall back to challenge.activities or global activities.
   const allActivities = isChallenge
-    ? (challenge.activities || [])
+    ? (period?.activities || [])
     : activitiesForGroup(student.groupId);
 
   const activities = isChallenge
     ? allActivities.filter(a => a.isActive ?? true)
     : allActivities.filter(a => a.isActive ?? a.active ?? true);
-
-  // ── Period ──────────────────────────────────────────────────────
-  const period = isChallenge
-    ? ((challenge.periods || []).find(p => p.isActive) || null)
-    : activePeriod(student.groupId);
 
   // ── Student pool (for rank) ─────────────────────────────────────
   const groupStudents = isChallenge
@@ -225,7 +226,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
           <div>
             {activities.length === 0 && (
               isChallenge
-                ? <EmptyState icon="📋" title="No activities yet" text="This challenge has no activities set up yet." />
+                ? <EmptyState icon="📋" title="No activities available yet" text="This challenge has no active period with activities." />
                 : <EmptyState icon="📋" title="No activities" text="Ask your admin to add activities to your group." />
             )}
             {activities.map(a => (
