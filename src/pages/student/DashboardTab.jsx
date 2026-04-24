@@ -117,13 +117,12 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setChecked(c => ({ ...c, [id]: !c[id] }));
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const updated = submitDay(student.id, dateStr, ids, quote.trim());
-    if (!updated) { setErr('Already submitted for this day.'); return; }
-    refreshStudent(updated);
+    const ok = await submitDay(student.id, dateStr, ids, quote.trim());
+    if (!ok) { setErr('Failed to submit. Please try again.'); return; }
     setChecked({});
     setQuote('');
   }
@@ -168,7 +167,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
           {activities.length > 0 && (
             <div className="space-y-1.5">
               {activities.map(a => {
-                const done = todaySub && (todaySub.completedActivities || []).includes(a.id);
+                const done = todaySub && (todaySub.completedActivities || []).some(ca => (typeof ca === 'string' ? ca : ca?.id) === a.id);
                 return (
                   <div key={a.id} className="flex items-center gap-2 text-sm">
                     <span className={`text-base leading-none ${done ? 'text-ok' : 'text-border'}`}>
@@ -199,7 +198,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
           <div>
             <p className="text-sm text-ok mb-3">✓ Submitted — great work!</p>
             {activities.map(a => {
-              const done = (existingSub.completedActivities || []).includes(a.id);
+              const done = (existingSub.completedActivities || []).some(ca => (typeof ca === 'string' ? ca : ca?.id) === a.id);
               return (
                 <div key={a.id} className={`flex items-center gap-3 p-3 rounded-lg border mb-1.5
                   ${done ? 'border-gold-d bg-[var(--gold-subtle)]' : 'border-border bg-bg-card2 opacity-40'}`}

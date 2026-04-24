@@ -45,7 +45,10 @@ function pointsMap(activities) {
 
 function subPoints(sub, map) {
   if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
-  return (sub.completedActivities || []).reduce((sum, id) => sum + Number(map[id] || 0), 0);
+  return (sub.completedActivities || []).reduce((sum, ca) => {
+    const id = typeof ca === 'string' ? ca : ca?.id;
+    return sum + Number(map[id] || 0);
+  }, 0);
 }
 
 function bonusTotal(student) {
@@ -61,12 +64,18 @@ function bonusBetween(student, start, end) {
 // ─── Grand total: all challenge submissions + bonus points ────────────
 export function getStudentGrandTotal(student, submissions, challenges) {
   const subPts = (submissions || []).reduce((sum, sub) => {
-    const ch = (challenges || []).find(c => sub.date >= c.startDate && sub.date <= c.endDate);
-    if (!ch) return sum;
-    const chPts = (sub.completedActivities || []).reduce((s, actId) => {
+    const ch = (challenges || []).find(c => c.startDate && c.endDate && sub.date >= c.startDate && sub.date <= c.endDate);
+    if (!ch) {
+      console.log('[grandTotal] no challenge for date:', sub.date, '| challenges:', (challenges || []).map(c => `${c.name}(${c.startDate}–${c.endDate})`));
+      return sum;
+    }
+    const chPts = (sub.completedActivities || []).reduce((s, ca) => {
+      const actId = typeof ca === 'string' ? ca : ca?.id;
       const act = (ch.activities || []).find(a => a.id === actId);
+      if (!act) console.log('[grandTotal] actId not found in challenge activities:', actId, '| challenge:', ch.name);
       return s + Number(act?.points || 0);
     }, 0);
+    console.log('[grandTotal] date:', sub.date, '| challenge:', ch.name, '| completedActivities:', sub.completedActivities, '| chPts:', chPts);
     return sum + Number(chPts || 0);
   }, 0);
   const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
