@@ -52,6 +52,7 @@ function mapSubmission(row) {
   return {
     date:                row.date,
     completedActivities: row.completed_activities || [],
+    points:              typeof row.points === 'number' ? row.points : null,
     quote:               row.quote || '',
     quoteLikes:          row.quote_likes || [],
     ...(typeof row.score_override === 'number' ? { scoreOverride: row.score_override } : {}),
@@ -581,7 +582,7 @@ export async function dbDeleteStudent(id) {
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export async function dbSubmitDay(studentId, dateStr, completedActivities, quote) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points) {
   console.log('[db] submitDay:', studentId, dateStr);
   const { data: existing } = await supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
   if (existing) { console.log('Submission already exists for this date'); return true; }
@@ -591,6 +592,7 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     student_id:           studentId,
     date:                 dateStr,
     completed_activities: completedActivities,
+    points:               typeof points === 'number' ? points : null,
     quote:                quote || '',
     quote_likes:          [],
   });

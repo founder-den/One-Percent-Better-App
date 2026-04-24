@@ -277,7 +277,16 @@ export function AppProvider({ children }) {
 
   const submitDay = useCallback(async (studentId, dateStr, completedActivities, quote) => {
     console.log('[AppContext] submitDay:', { studentId, dateStr });
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '');
+    const challenge = challenges.find(c => c.startDate && c.endDate && dateStr >= c.startDate && dateStr <= c.endDate);
+    let points = null;
+    if (challenge) {
+      points = (completedActivities || []).reduce((sum, ca) => {
+        const actId = typeof ca === 'string' ? ca : ca?.id;
+        const act = (challenge.activities || []).find(a => a.id === actId);
+        return sum + Number(act?.points || 0);
+      }, 0);
+    }
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points);
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
     const sub = {
       date: dateStr, completedActivities, quote: quote || '', quoteLikes: []
@@ -289,7 +298,7 @@ export function AppProvider({ children }) {
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));
     return students.find(st => st.id === studentId) || null;
-  }, [students]);
+  }, [students, challenges]);
 
   const editSubmission = useCallback(async (studentId, dateStr, completedActivities, scoreOverride) => {
     console.log('[AppContext] editSubmission:', { studentId, dateStr });
