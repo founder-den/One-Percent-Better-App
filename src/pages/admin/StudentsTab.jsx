@@ -38,8 +38,8 @@ const TABS = [
 
 export default function StudentsTab({ groupId }) {
   const {
-    groups, students,
-    approveStudent, deleteStudent, updateStudent, editSubmission, addBonusPoints,
+    groups, students, periods,
+    approveStudent, deleteStudent, updateStudent, editSubmission, adminAddSubmission, addBonusPoints,
     updateBonusPoints, deleteBonusPoints,
     addPersonalTasbih, deletePersonalTasbih,
     activitiesForGroup, studentsForGroup,
@@ -112,6 +112,14 @@ export default function StudentsTab({ groupId }) {
   const [bonusReason, setBonusReason] = useState('');
   const [bonusErr,    setBonusErr]    = useState('');
   const [bonusOk,     setBonusOk]     = useState('');
+
+  // Add submission modal
+  const [addSubModal,   setAddSubModal]   = useState(null); // student object
+  const [addSubDate,    setAddSubDate]    = useState('');
+  const [addSubPeriodId, setAddSubPeriodId] = useState('');
+  const [addSubChecked, setAddSubChecked] = useState({});
+  const [addSubErr,     setAddSubErr]     = useState('');
+  const [addSubSaving,  setAddSubSaving]  = useState(false);
 
   // Collapsed/expanded student rows
   const [expandedStudentId, setExpandedStudentId] = useState(null);
@@ -215,6 +223,56 @@ export default function StudentsTab({ groupId }) {
     setBonusOk(`+${pts} points added to ${bonusModal.fullName}.`);
     setBonusPts('');
     setBonusReason('');
+  }
+
+  // Build period options for add-submission modal: group periods + joined challenge periods
+  function getPeriodOptions(student) {
+    const opts = [];
+    periods.filter(p => p.groupId === student.groupId).forEach(p => {
+      opts.push({
+        value:      p.id,
+        label:      `${p.name}${p.isActive ? ' (active)' : ''}`,
+        activities: p.activities || [],
+      });
+    });
+    challengeMemberships.filter(m => m.studentId === student.id).forEach(m => {
+      const ch = challenges.find(c => c.id === m.challengeId);
+      if (!ch) return;
+      (ch.periods || []).forEach(p => {
+        opts.push({
+          value:      p.id,
+          label:      `${ch.name}: ${p.name}${p.isActive ? ' (active)' : ''}`,
+          activities: p.activities || [],
+        });
+      });
+    });
+    return opts;
+  }
+
+  // Get challenge name for a submission's periodId (used in submission list)
+  function getChallengeName(periodId) {
+    if (!periodId) return null;
+    for (const ch of challenges) {
+      if ((ch.periods || []).some(p => p.id === periodId)) return ch.name;
+    }
+    return null;
+  }
+
+  // Save handler for add-submission modal
+  async function saveAddSub() {
+    setAddSubErr('');
+    if (!addSubDate)     { setAddSubErr('Date is required.'); return; }
+    if (!addSubPeriodId) { setAddSubErr('Select a period.'); return; }
+    const opts   = getPeriodOptions(addSubModal);
+    const period = opts.find(o => o.value === addSubPeriodId);
+    if (!period) { setAddSubErr('Invalid period.'); return; }
+    const selectedActs = (period.activities || []).filter(a => addSubChecked[a.id]);
+    const pts          = selectedActs.reduce((sum, a) => sum + Number(a.points || 0), 0);
+    setAddSubSaving(true);
+    const ok = await adminAddSubmission(addSubModal.id, addSubDate, selectedActs.map(a => a.id), addSubPeriodId, pts);
+    setAddSubSaving(false);
+    if (!ok) { setAddSubErr('Failed to save. The student may already have a submission for that date and period.'); return; }
+    setAddSubModal(null);
   }
 
   if (!groupId) {
@@ -399,9 +457,24 @@ export default function StudentsTab({ groupId }) {
                     {/* ── Submissions ── */}
                     {expandedTab === 'submissions' && (
                       <div className="space-y-2">
-                        <p className="text-xs text-muted">
-                          {subs.length} submission{subs.length !== 1 ? 's' : ''} total
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted">
+                            {subs.length} submission{subs.length !== 1 ? 's' : ''} total
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              setAddSubDate('');
+                              setAddSubPeriodId('');
+                              setAddSubChecked({});
+                              setAddSubErr('');
+                              setAddSubModal(st);
+                            }}
+                          >
+                            + Add Submission
+                          </Button>
+                        </div>
                         {subs.length === 0 ? (
                           <p className="text-xs text-muted py-2">No submissions yet.</p>
                         ) : (
@@ -435,7 +508,12 @@ export default function StudentsTab({ groupId }) {
                                           </span>
                                         ))}
                                       </div>
-                                      <span className="text-xs font-semibold text-gold">+{pts} pts</span>
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <span className="text-xs font-semibold text-gold">+{pts} pts</span>
+                                        {getChallengeName(sub.periodId) && (
+                                          <span className="text-xs text-muted">· {getChallengeName(sub.periodId)}</span>
+                                        )}
+                                      </div>
                                     </div>
                                     <Button variant="ghost" size="xs" onClick={() => openEdit(st, sub)}>Edit</Button>
                                   </div>
@@ -749,6 +827,73 @@ export default function StudentsTab({ groupId }) {
           </div>
         )}
       </Modal>
+
+      {/* Add submission modal */}
+      {addSubModal && (() => {
+        const opts           = getPeriodOptions(addSubModal);
+        const selectedPeriod = opts.find(o => o.value === addSubPeriodId);
+        const periodActs     = selectedPeriod?.activities || [];
+        const calcPts        = periodActs.filter(a => addSubChecked[a.id]).reduce((s, a) => s + Number(a.points || 0), 0);
+        return (
+          <Modal
+            open={!!addSubModal}
+            onClose={() => setAddSubModal(null)}
+            title={`Add Submission — ${addSubModal.fullName}`}
+            footer={
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setAddSubModal(null)}>Cancel</Button>
+                <Button size="sm" onClick={saveAddSub} disabled={addSubSaving}>
+                  {addSubSaving ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-3">
+              {addSubErr && <Alert type="error">{addSubErr}</Alert>}
+              <Input
+                label="Date"
+                type="date"
+                value={addSubDate}
+                onChange={e => setAddSubDate(e.target.value)}
+              />
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Period / Challenge</label>
+                <select
+                  value={addSubPeriodId}
+                  onChange={e => { setAddSubPeriodId(e.target.value); setAddSubChecked({}); }}
+                  className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+                >
+                  <option value="">— Select a period —</option>
+                  {opts.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              {selectedPeriod && periodActs.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted uppercase tracking-wide mb-2">Activities</p>
+                  <div className="space-y-1">
+                    {periodActs.map(a => (
+                      <ChecklistItem
+                        key={a.id}
+                        activity={a}
+                        checked={!!addSubChecked[a.id]}
+                        onChange={() => setAddSubChecked(c => ({ ...c, [a.id]: !c[a.id] }))}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {selectedPeriod && periodActs.length === 0 && (
+                <p className="text-xs text-muted">No activities in this period.</p>
+              )}
+              {selectedPeriod && (
+                <p className="text-sm font-semibold text-gold">Points: +{calcPts}</p>
+              )}
+            </div>
+          </Modal>
+        );
+      })()}
 
       {/* Personal Tasbih admin modal */}
       <Modal

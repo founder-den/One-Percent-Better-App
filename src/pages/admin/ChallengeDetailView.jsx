@@ -413,14 +413,16 @@ function ChallengeDataTab({ challenge, students, memberships }) {
     ? allSubs.filter(sub => sub.periodId === activePeriod.id)
     : allSubs;
 
+  const totalPeriodSubs = activePeriodSubs.length;
   const activityStats = activities.map(act => {
     const count = activePeriodSubs.filter(sub =>
       (sub.completedActivities || []).some(ca =>
         (typeof ca === 'string' ? ca : ca?.id) === act.id
       )
     ).length;
-    const pct = activePeriodSubs.length > 0 ? (count / activePeriodSubs.length) * 100 : 0;
-    return { ...act, count, pct };
+    const pct     = totalPeriodSubs > 0 ? (count / totalPeriodSubs) * 100 : 0;
+    const skipped = totalPeriodSubs - count;
+    return { ...act, count, pct, skipped, total: totalPeriodSubs };
   });
 
   // Bug 3: Read stored sub.points instead of recalculating from activities
@@ -465,7 +467,10 @@ function ChallengeDataTab({ challenge, students, memberships }) {
                 <div key={act.id} className="flex flex-col items-center gap-1">
                   <Donut pct={act.pct} size={80} stroke={9} />
                   <p className="text-xs text-primary font-medium text-center leading-tight mt-1">{act.name}</p>
-                  <p className="text-xs text-muted">{act.count} submission{act.count !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-muted">{act.count} of {act.total}</p>
+                  {act.skipped > 0 && (
+                    <p className="text-xs text-muted">{act.skipped} skipped</p>
+                  )}
                 </div>
               ))}
             </div>

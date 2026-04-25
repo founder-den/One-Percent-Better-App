@@ -660,10 +660,10 @@ export async function dbDeleteStudent(id) {
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
 export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points, periodId) {
   console.log('[db] submitDay:', studentId, dateStr);
-  const { data: existing } = await supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).eq('period_id', periodId ?? null).maybeSingle();
-  if (existing) { console.log('Submission already exists for this date + period'); return true; }
-
-  const { error } = await supabase.from('submissions').insert({
+  // Upsert with ignoreDuplicates prevents the race condition where two devices
+  // submit simultaneously — the DB unique constraint does the dedup atomically.
+  // Requires: UNIQUE (student_id, date, period_id) on submissions table.
+  const { error } = await supabase.from('submissions').upsert({
     id:                   generateId(),
     student_id:           studentId,
     date:                 dateStr,
@@ -672,7 +672,7 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     period_id:            periodId || null,
     quote:                quote || '',
     quote_likes:          [],
-  });
+  }, { onConflict: 'student_id, date, period_id', ignoreDuplicates: true });
   if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
   return true;
 }

@@ -350,6 +350,22 @@ export function AppProvider({ children }) {
     }));
   }, []);
 
+  const adminAddSubmission = useCallback(async (studentId, dateStr, completedActivities, periodId, points) => {
+    console.log('[AppContext] adminAddSubmission:', { studentId, dateStr, periodId });
+    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, '', points, periodId || null);
+    if (!ok) { console.error('[AppContext] adminAddSubmission failed — state NOT updated'); return false; }
+    const sub = {
+      date: dateStr, completedActivities, points, periodId: periodId || null, quote: '', quoteLikes: [],
+    };
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      const already = (st.submissions || []).some(x => x.date === dateStr && x.periodId === (periodId || null));
+      if (already) return st;
+      return { ...st, submissions: [...(st.submissions || []), sub] };
+    }));
+    return true;
+  }, []);
+
   const deleteSubmission = useCallback(async (studentId, dateStr) => {
     console.log('[AppContext] deleteSubmission:', { studentId, dateStr });
     const ok = await dbDeleteSubmission(studentId, dateStr);
@@ -845,7 +861,7 @@ export function AppProvider({ children }) {
       addGroup, updateGroup,
       // Students
       registerStudent, updateStudent, deleteStudent, approveStudent,
-      submitDay, editSubmission, deleteSubmission, likeQuote, saveTasbih,
+      submitDay, editSubmission, adminAddSubmission, deleteSubmission, likeQuote, saveTasbih,
       addBonusPoints, updateBonusPoints, deleteBonusPoints,
       // Activities
       addActivity, updateActivity,
