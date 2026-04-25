@@ -5,7 +5,7 @@ import { Card, Button, SectionHeading } from '../../components/ui.jsx';
 import { todayString } from '../../services/data.js';
 
 export default function TasbihTab() {
-  const { student, refreshStudent } = useAuth();
+  const { student } = useAuth();
   const { saveTasbih } = useApp();
 
   const today = todayString();
@@ -23,8 +23,7 @@ export default function TasbihTab() {
 
   // Persist whenever tasbih changes
   useEffect(() => {
-    const updated = saveTasbih(student, tasbih);
-    if (updated) refreshStudent(updated);
+    saveTasbih(student, tasbih);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasbih]);
 
