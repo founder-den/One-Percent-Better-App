@@ -421,7 +421,7 @@ function ChallengeDataTab({ challenge, students, memberships }) {
   const leaderboard = memberStudents
     .map(s => {
       const pts = (s.submissions || [])
-        .filter(sub => isValidChallengeSub(sub, challenge, actIds))
+        .filter(sub => isValidChallengeSub(sub, challenge))
         .reduce((sum, sub) => sum + challengeSubPoints(sub, challenge), 0);
       return { ...s, pts };
     })
@@ -521,7 +521,7 @@ function ChallengeSubmissionsTab({ challenge, students, memberships, onReload })
           ...sub,
           studentId:   s.id,
           studentName: s.fullName || s.username,
-          pts:         challengeSubPoints(sub, challenge),
+          pts:         sub.points || sub.scoreOverride || 0,
         }))
     )
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -576,9 +576,12 @@ function ChallengeSubmissionsTab({ challenge, students, memberships, onReload })
               className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3 py-2 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
             >
               <option value="">All Students</option>
-              {memberStudents.map(s => (
-                <option key={s.id} value={s.id}>{s.fullName || s.username}</option>
-              ))}
+              {[...new Set(allSubs.map(s => s.studentId))].map(id => {
+                const s = allSubs.find(sub => sub.studentId === id);
+                return (
+                  <option key={id} value={id}>{s?.studentName || id}</option>
+                );
+              })}
             </select>
           </div>
           <div className="flex-1 min-w-28">
