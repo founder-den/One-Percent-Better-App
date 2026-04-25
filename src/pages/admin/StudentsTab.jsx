@@ -225,23 +225,22 @@ export default function StudentsTab({ groupId }) {
     setBonusReason('');
   }
 
-  // Build period options for add-submission modal: group periods + joined challenge periods
+  // Build period options for add-submission modal: group periods + all challenge periods
   function getPeriodOptions(student) {
     const opts = [];
     periods.filter(p => p.groupId === student.groupId).forEach(p => {
       opts.push({
         value:      p.id,
-        label:      `${p.name}${p.isActive ? ' (active)' : ''}`,
+        label:      `${p.name}${p.isActive ? ' (Active)' : ''}`,
         activities: p.activities || [],
       });
     });
-    challengeMemberships.filter(m => m.studentId === student.id).forEach(m => {
-      const ch = challenges.find(c => c.id === m.challengeId);
-      if (!ch) return;
+    challenges.forEach(ch => {
       (ch.periods || []).forEach(p => {
+        const active = p.isActive || p.is_active;
         opts.push({
           value:      p.id,
-          label:      `${ch.name}: ${p.name}${p.isActive ? ' (active)' : ''}`,
+          label:      `${ch.name} — ${p.name}${active ? ' (Active)' : ''}`,
           activities: p.activities || [],
         });
       });
