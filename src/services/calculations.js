@@ -223,10 +223,15 @@ export function submissionPoints(sub, activities) {
 }
 
 // ─── Points per day for a student (for weekly chart) ─────────────
+// Uses stored sub.points first so the chart is always correct even when
+// the activity map is empty or IDs have changed since submission.
 export function pointsPerDay(student, activities, dates) {
   const map = pointsMap(activities);
   return dates.map(dateStr => {
     const sub = (student.submissions || []).find(s => s.date === dateStr);
-    return sub ? subPoints(sub, map) : 0;
+    if (!sub) return 0;
+    if (typeof sub.scoreOverride === 'number') return sub.scoreOverride;
+    if (typeof sub.points === 'number') return sub.points;
+    return subPoints(sub, map);
   });
 }
