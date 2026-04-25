@@ -282,7 +282,7 @@ export async function loadAll() {
     supabase.from('books').select('*'),
     supabase.from('program_completions').select('*'),
     supabase.from('activities').select('*'),
-    supabase.from('periods').select('id, group_id, name, start_date, end_date, is_active, count_for_all_time, prize_text, activities'),
+    supabase.from('periods').select('*'),   // select(*) — ensures the activities jsonb column is always included
     supabase.from('global_tasbihs').select('*'),
     supabase.from('personal_tasbih_templates').select('*'),
     supabase.from('programs').select('*'),
@@ -299,24 +299,44 @@ export async function loadAll() {
     if (e) console.error(`[db] loadAll — ${TABLE_NAMES[i]} error:`, e);
   });
 
-  // RLS diagnostic: log raw counts and any empty results that could signal policy blocks
-  console.log('[db] loadAll — raw counts:', {
-    students:   studentRows?.length   ?? 'ERROR',
+  // ── Diagnostic logging ───────────────────────────────────────────
+  // Query being run: supabase.from('periods').select('*')  — no filters applied.
+  // If this returns 0 rows with no error it is an RLS policy block, not a code bug.
+  // Fix: Supabase dashboard → Table Editor → periods → RLS → add policy:
+  //   FOR ALL TO authenticated (or anon) USING (true)
+  console.log('[db] loadAll — raw counts (query: select(*), no filters):', {
+    students:    studentRows?.length    ?? 'ERROR',
     submissions: submissionRows?.length ?? 'ERROR',
-    periods:    periodRows?.length    ?? 'ERROR',
-    challenges: challengeRows?.length ?? 'ERROR',
+    activities:  activityRows?.length   ?? 'ERROR',
+    periods:     periodRows?.length     ?? 'ERROR',
+    challenges:  challengeRows?.length  ?? 'ERROR',
   });
   if (studentRows?.length === 0 && !e1) {
-    console.warn('[db] loadAll — students returned 0 rows with no error. Almost certainly an RLS block. Fix: Supabase dashboard → Authentication → Policies → students → add policy FOR ALL TO authenticated USING (true).');
+    console.warn('[db] loadAll — students: 0 rows, no error → RLS block. Fix: add SELECT policy on students table.');
   }
   if (periodRows?.length === 0 && !e7) {
-    console.warn('[db] loadAll — periods returned 0 rows with no error. Likely RLS block on periods table.');
+    console.warn(
+      '[db] loadAll — periods: 0 rows, no error → RLS block on periods table.\n' +
+      '  Exact query: supabase.from("periods").select("*")  — zero filters.\n' +
+      '  Fix in Supabase dashboard → Authentication → Policies → periods → enable read for authenticated/anon role.\n' +
+      '  Without periods, activities cannot load and the submission checklist will be empty.'
+    );
   }
   if (submissionRows?.length === 0 && !e2) {
-    console.warn('[db] loadAll — submissions returned 0 rows with no error. Possible RLS block on submissions table.');
+    console.warn('[db] loadAll — submissions: 0 rows, no error → possible RLS block on submissions table.');
   }
   if (periodRows?.length > 0) {
-    console.log('[db] loadAll — first period sample:', periodRows[0]);
+    const sample = periodRows[0];
+    console.log('[db] loadAll — first period row:', sample);
+    console.log('[db] loadAll — first period activities field:', {
+      type:  typeof sample.activities,
+      value: sample.activities,
+      count: Array.isArray(sample.activities) ? sample.activities.length : 'not-array',
+    });
+    if (!Array.isArray(sample.activities) || sample.activities.length === 0) {
+      console.warn('[db] loadAll — period has no activities in the activities jsonb column. ' +
+        'Make sure activities are saved into the period row (periods.activities), not just into challenges.periods[].activities.');
+    }
   }
 
   const subsByStudent = {};
