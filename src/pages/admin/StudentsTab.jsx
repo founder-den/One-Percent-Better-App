@@ -54,22 +54,35 @@ export default function StudentsTab({ groupId }) {
   // challenge-specific if the submission date falls within a challenge the student joined,
   // otherwise falls back to the general group activities.
   function getActivitiesForSub(sub, studentId) {
+    // Prefer periodId lookup (same approach as the edit modal) — accurate even
+    // when challenge.startDate/endDate don't cover the submission date exactly.
+    if (sub.periodId) {
+      for (const ch of challenges) {
+        const pd = (ch.periods || []).find(p => p.id === sub.periodId);
+        if (pd) return pd.activities || [];
+      }
+    }
+    // Fallback: match by date range within challenge periods the student joined
     const memberOf = challengeMemberships.filter(m => m.studentId === studentId);
     for (const membership of memberOf) {
       const challenge = challenges.find(c => c.id === membership.challengeId);
       if (!challenge) continue;
-      const { startDate, endDate, activities: challengeActs } = challenge;
-      if (startDate && endDate && sub.date >= startDate && sub.date <= endDate) {
-        return challengeActs || [];
-      }
+      const matchedPd = (challenge.periods || []).find(
+        p => p.startDate && p.endDate && sub.date >= p.startDate && sub.date <= p.endDate
+      );
+      if (matchedPd) return matchedPd.activities || [];
     }
     return groupActs;
   }
 
-  // Total points using challenge-aware activity lookup per submission
+  // Total points — uses stored sub.points so the header always matches what
+  // was earned at submit time, regardless of whether activities are resolvable.
   function calcStudentTotalPts(st) {
     const actPts = (st.submissions || []).reduce((sum, sub) => {
-      return sum + submissionPoints(sub, getActivitiesForSub(sub, st.id));
+      const pts = typeof sub.scoreOverride === 'number' ? sub.scoreOverride
+        : typeof sub.points === 'number' ? sub.points
+        : submissionPoints(sub, getActivitiesForSub(sub, st.id));
+      return sum + pts;
     }, 0);
     const bonus = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
     return actPts + bonus;
@@ -410,8 +423,14 @@ export default function StudentsTab({ groupId }) {
                               {pagedSubs.map(sub => {
                                 const subActs   = getActivitiesForSub(sub, st.id);
                                 const subActMap = Object.fromEntries(subActs.map(a => [a.id, a.name || a.id]));
-                                const pts       = submissionPoints(sub, subActs);
-                                const actNames  = (sub.completedActivities || []).map(id => subActMap[id] || id);
+                                // Use stored points — recalculation gives 0 when activity map is empty
+                                const pts = typeof sub.scoreOverride === 'number' ? sub.scoreOverride
+                                  : typeof sub.points === 'number' ? sub.points
+                                  : submissionPoints(sub, subActs);
+                                // Filter out IDs that can't be resolved to a name
+                                const actNames  = (sub.completedActivities || [])
+                                  .map(id => subActMap[id] || null)
+                                  .filter(Boolean);
                                 return (
                                   <div
                                     key={sub.date}
