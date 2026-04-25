@@ -379,6 +379,7 @@ export function PasswordInput({ label, error, hint, className = '', ...props }) 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function WeeklyChart({ days }) {
+  console.log('[WeeklyChart] days received:', days.map(d => ({ date: d.dateStr, pts: d.points, isToday: d.isToday })));
   const maxPts = Math.max(1, ...days.map(d => d.points));
   return (
     <div className="w-full select-none">

@@ -13,7 +13,6 @@ import {
   getStudentStreak,
   buildLeaderboard,
   submissionPoints,
-  pointsPerDay,
 } from '../../services/calculations.js';
 
 const DAY_OPTS = [
@@ -111,12 +110,37 @@ export default function DashboardTab({ challenge, memberStudents }) {
   const myRank = lb.find(r => r.id === student.id)?.rank ?? '—';
 
   // ── Weekly chart ───────────────────────────────────────────────
+  // Build chart data directly from stored submission.points — no activity
+  // recalculation needed, and no dependency on allActivities being loaded.
+  // In challenge mode, only include submissions that belong to this challenge's
+  // periods (matched by periodId) so the chart reflects challenge progress.
   const weekDays = useMemo(() => {
-    const days  = getWeekDays();
-    const dates = days.map(d => d.dateStr);
-    const pts   = pointsPerDay(student, allActivities, dates);
-    return days.map((d, i) => ({ ...d, points: pts[i] }));
-  }, [student, allActivities]);
+    const days = getWeekDays();
+    const periodIds = isChallenge
+      ? new Set((challenge?.periods || []).map(p => p.id))
+      : null;
+
+    console.log('[DashboardTab] weekDays — building chart data:', {
+      isChallenge,
+      challengePeriodCount: isChallenge ? (challenge?.periods || []).length : 'N/A',
+      studentSubCount: (student.submissions || []).length,
+      periodIds: periodIds ? [...periodIds] : 'N/A',
+    });
+
+    return days.map(day => {
+      const sub = (student.submissions || []).find(s => {
+        if (s.date !== day.dateStr) return false;
+        if (periodIds !== null) return s.periodId && periodIds.has(s.periodId);
+        return true;
+      });
+      const pts = sub
+        ? (typeof sub.scoreOverride === 'number' ? sub.scoreOverride
+          : typeof sub.points === 'number' ? sub.points
+          : 0)
+        : 0;
+      return { ...day, points: pts };
+    });
+  }, [student, challenge, isChallenge]);
 
   const todayStr = todayString();
   const todaySub = (student.submissions || []).find(s => s.date === todayStr);
