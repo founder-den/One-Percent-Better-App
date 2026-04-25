@@ -8,12 +8,16 @@
 
 -- ─── admin_settings ──────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admin_settings (
-  id                text    PRIMARY KEY DEFAULT 'main',
-  admin_username    text    NOT NULL    DEFAULT 'admin',
-  admin_password    text    NOT NULL    DEFAULT 'admin1',
-  registration_mode text    NOT NULL    DEFAULT 'open',
-  programs_label    text    NOT NULL    DEFAULT 'Programs'
+  id                       text    PRIMARY KEY DEFAULT 'main',
+  admin_username           text    NOT NULL    DEFAULT 'admin',
+  admin_password           text    NOT NULL    DEFAULT 'admin1',
+  registration_mode        text    NOT NULL    DEFAULT 'open',
+  programs_label           text    NOT NULL    DEFAULT 'Programs',
+  allow_past_submissions   boolean NOT NULL    DEFAULT false
 );
+
+-- Add column if table already exists (idempotent migration)
+ALTER TABLE admin_settings ADD COLUMN IF NOT EXISTS allow_past_submissions boolean NOT NULL DEFAULT false;
 
 -- Seed the single settings row (idempotent)
 INSERT INTO admin_settings DEFAULT VALUES ON CONFLICT DO NOTHING;

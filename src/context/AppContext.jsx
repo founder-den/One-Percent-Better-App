@@ -10,7 +10,7 @@ import {
   dbAddActivity, dbAddActivities, dbUpdateActivity,
   dbAddPeriod, dbUpdatePeriod, dbDeletePeriod, dbActivatePeriod,
   dbRegisterStudent, dbUpdateStudent, dbDeleteStudent,
-  dbSubmitDay, dbEditSubmission, dbDeleteSubmission,
+  dbSubmitDay, dbSavePastDaySubmission, dbEditSubmission, dbDeleteSubmission,
   dbToggleQuoteLike,
   dbAddBonusPoints, dbUpdateBonusPoints, dbDeleteBonusPoints,
   dbUpdateTasbih,
@@ -49,8 +49,9 @@ export function AppProvider({ children }) {
   const [community,               setCommunity]           = useState(null);
   const [adminUsername,           setAdminUsername]       = useState('admin');
   const [adminPassword,           setAdminPassword]       = useState('admin1');
-  const [registrationMode,        setRegModeState]        = useState('open');
-  const [programsLabel,           setProgramsLabelState]  = useState('Programs');
+  const [registrationMode,        setRegModeState]             = useState('open');
+  const [programsLabel,           setProgramsLabelState]        = useState('Programs');
+  const [allowPastSubmissions,    setAllowPastSubmissionsState] = useState(false);
   const [groups,                  setGroups]              = useState([]);
   const [students,                setStudents]            = useState([]);
   const [activities,              setActivities]          = useState([]);
@@ -81,6 +82,7 @@ export function AppProvider({ children }) {
       setAdminPassword(data.adminSettings.adminPassword);
       setRegModeState(data.adminSettings.registrationMode);
       setProgramsLabelState(data.adminSettings.programsLabel);
+      setAllowPastSubmissionsState(data.adminSettings.allowPastSubmissions ?? false);
       // ── Auto-reset global tasbihs ─────────────────────────────
       const resetGlobals = data.globalTasbihs.map(t => {
         const { needsReset, newLastResetDate } = checkAndResetTasbih(t.resetType, t.lastResetDate);
@@ -198,6 +200,51 @@ export function AppProvider({ children }) {
     if (!ok) { console.error('[AppContext] setProgramsLabel failed — state NOT updated'); return; }
     setProgramsLabelState(label);
   }, []);
+
+  const setAllowPastSubmissions = useCallback(async (val) => {
+    console.log('[AppContext] setAllowPastSubmissions:', val);
+    const ok = await dbSaveAdminSettings({ allowPastSubmissions: val });
+    if (!ok) { console.error('[AppContext] setAllowPastSubmissions failed — state NOT updated'); return; }
+    setAllowPastSubmissionsState(val);
+  }, []);
+
+  const submitPastDay = useCallback(async (studentId, dateStr, completedActivities, challengeId = null) => {
+    console.log('[AppContext] submitPastDay:', { studentId, dateStr, challengeId });
+    const st = students.find(s => s.id === studentId);
+
+    let period = null;
+    if (challengeId) {
+      const ch = challenges.find(c => c.id === challengeId);
+      period = (ch?.periods || []).find(p => dateStr >= p.startDate && dateStr <= p.endDate) || null;
+    } else {
+      period = st ? periods.find(p => p.groupId === st.groupId && dateStr >= p.startDate && dateStr <= p.endDate) || null : null;
+    }
+
+    const points = period
+      ? (completedActivities || []).reduce((sum, actId) => {
+          const act = (period.activities || []).find(a => a.id === actId);
+          return sum + Number(act?.points || 0);
+        }, 0)
+      : null;
+
+    const ok = await dbSavePastDaySubmission(studentId, dateStr, completedActivities, points, period?.id || null);
+    if (!ok) { console.error('[AppContext] submitPastDay failed — state NOT updated'); return false; }
+
+    const sub = {
+      date: dateStr, completedActivities, points, periodId: period?.id || null, quote: '', quoteLikes: [],
+    };
+    setStudents(s => s.map(st => {
+      if (st.id !== studentId) return st;
+      const existingIdx = (st.submissions || []).findIndex(x => x.date === dateStr && x.periodId === (period?.id ?? null));
+      if (existingIdx >= 0) {
+        const updated = [...st.submissions];
+        updated[existingIdx] = sub;
+        return { ...st, submissions: updated };
+      }
+      return { ...st, submissions: [...(st.submissions || []), sub] };
+    }));
+    return true;
+  }, [students, periods, challenges]);
 
   // ── Groups ────────────────────────────────────────────────────
   const addGroup = useCallback(async (name, groupCode) => {
@@ -836,7 +883,7 @@ export function AppProvider({ children }) {
       loading, dbError, reload,
       // State
       community, groups, students, activities, periods,
-      registrationMode, adminPassword, adminUsername,
+      registrationMode, adminPassword, adminUsername, allowPastSubmissions,
       globalTasbihs, programs, programsLabel, personalTasbihTemplates,
       collectiveTaskCounts,
       // Computed helpers (synchronous, read from state)
@@ -856,12 +903,12 @@ export function AppProvider({ children }) {
       // Community
       updateCommunity,
       // Admin settings
-      changeAdminUsername, changeAdminPassword, setRegMode, setProgramsLabel,
+      changeAdminUsername, changeAdminPassword, setRegMode, setProgramsLabel, setAllowPastSubmissions,
       // Groups
       addGroup, updateGroup,
       // Students
       registerStudent, updateStudent, deleteStudent, approveStudent,
-      submitDay, editSubmission, adminAddSubmission, deleteSubmission, likeQuote, saveTasbih,
+      submitDay, submitPastDay, editSubmission, adminAddSubmission, deleteSubmission, likeQuote, saveTasbih,
       addBonusPoints, updateBonusPoints, deleteBonusPoints,
       // Activities
       addActivity, updateActivity,

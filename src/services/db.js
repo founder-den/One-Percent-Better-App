@@ -389,10 +389,11 @@ export async function loadAll() {
 
   const s = settingsRow || {};
   const adminSettings = {
-    adminUsername:    s.admin_username    || 'admin',
-    adminPassword:    s.admin_password    || 'admin1',
-    registrationMode: s.registration_mode || 'open',
-    programsLabel:    s.programs_label    || 'Programs',
+    adminUsername:        s.admin_username          || 'admin',
+    adminPassword:        s.admin_password          || 'admin1',
+    registrationMode:     s.registration_mode       || 'open',
+    programsLabel:        s.programs_label          || 'Programs',
+    allowPastSubmissions: s.allow_past_submissions  ?? false,
   };
 
   console.log(`[db] ✓ loadAll — ${students.length} students, ${activityRows?.length || 0} activities, ${periodRows?.length || 0} periods`);
@@ -435,10 +436,11 @@ export async function dbSaveCommunity(fields) {
 export async function dbSaveAdminSettings(fields) {
   console.log('[db] saveAdminSettings:', Object.keys(fields));
   const row = {};
-  if (fields.adminUsername    !== undefined) row.admin_username    = fields.adminUsername;
-  if (fields.adminPassword    !== undefined) row.admin_password    = fields.adminPassword;
-  if (fields.registrationMode !== undefined) row.registration_mode = fields.registrationMode;
-  if (fields.programsLabel    !== undefined) row.programs_label    = fields.programsLabel;
+  if (fields.adminUsername        !== undefined) row.admin_username          = fields.adminUsername;
+  if (fields.adminPassword        !== undefined) row.admin_password          = fields.adminPassword;
+  if (fields.registrationMode     !== undefined) row.registration_mode       = fields.registrationMode;
+  if (fields.programsLabel        !== undefined) row.programs_label          = fields.programsLabel;
+  if (fields.allowPastSubmissions !== undefined) row.allow_past_submissions  = fields.allowPastSubmissions;
 
   const { error } = await supabase.from('admin_settings').update(row).eq('id', 'main');
   if (error) { console.error('[db] saveAdminSettings — Supabase write FAILED:', error); return false; }
@@ -674,6 +676,35 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     quote_likes:          [],
   }, { onConflict: 'student_id, date, period_id', ignoreDuplicates: true });
   if (error) { console.error('[db] submitDay — Supabase write FAILED:', error); return false; }
+  return true;
+}
+
+// Check-then-insert/update for past date submissions (bypasses ignoreDuplicates).
+export async function dbSavePastDaySubmission(studentId, dateStr, completedActivities, points, periodId) {
+  console.log('[db] savePastDaySubmission:', studentId, dateStr);
+  let query = supabase.from('submissions').select('id')
+    .eq('student_id', studentId).eq('date', dateStr);
+  query = periodId ? query.eq('period_id', periodId) : query.is('period_id', null);
+  const { data: existing } = await query.maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from('submissions')
+      .update({ completed_activities: completedActivities, points: typeof points === 'number' ? points : null })
+      .eq('id', existing.id);
+    if (error) { console.error('[db] savePastDaySubmission update — FAILED:', error); return false; }
+  } else {
+    const { error } = await supabase.from('submissions').insert({
+      id:                   generateId(),
+      student_id:           studentId,
+      date:                 dateStr,
+      completed_activities: completedActivities,
+      points:               typeof points === 'number' ? points : null,
+      period_id:            periodId || null,
+      quote:                '',
+      quote_likes:          [],
+    });
+    if (error) { console.error('[db] savePastDaySubmission insert — FAILED:', error); return false; }
+  }
   return true;
 }
 

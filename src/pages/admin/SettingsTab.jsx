@@ -201,6 +201,7 @@ export default function SettingsTab() {
   const {
     community, updateCommunity,
     registrationMode, setRegMode,
+    allowPastSubmissions, setAllowPastSubmissions,
     adminPassword, changeAdminPassword,
     resetAll,
   } = useApp();
@@ -426,6 +427,32 @@ export default function SettingsTab() {
             ? 'New accounts start as Pending and must be approved by an admin.'
             : 'New accounts are activated immediately upon registration.'}
         </p>
+      </Card>
+
+      {/* Submission settings */}
+      <Card>
+        <SectionHeading>Submission Settings</SectionHeading>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-primary">Allow Past Submissions</p>
+            <p className="text-xs text-muted mt-0.5">
+              When enabled, students can submit or edit activities for any past date in their challenge history.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAllowPastSubmissions(!allowPastSubmissions)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-gold/30 ${
+              allowPastSubmissions ? 'bg-gold' : 'bg-border'
+            }`}
+            aria-checked={allowPastSubmissions}
+            role="switch"
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              allowPastSubmissions ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
       </Card>
 
       {/* Admin password */}

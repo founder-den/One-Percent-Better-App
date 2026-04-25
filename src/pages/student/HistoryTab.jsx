@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
-import { EmptyState, StatCard } from '../../components/ui.jsx';
+import { EmptyState, StatCard, Button } from '../../components/ui.jsx';
 import { formatDateShort, formatDate } from '../../services/data.js';
 import {
   getStudentTotalPoints,
@@ -11,7 +11,6 @@ import {
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
-// Generate list of date strings between start and end (inclusive, max 14)
 function dateRange(startStr, endStr, max = 14) {
   const dates = [];
   const cur = new Date(startStr + 'T00:00:00');
@@ -23,7 +22,6 @@ function dateRange(startStr, endStr, max = 14) {
   return dates;
 }
 
-// Last N days ending today
 function lastNDays(n) {
   const dates = [];
   const d = new Date();
@@ -37,10 +35,12 @@ function lastNDays(n) {
 
 // Props:
 //   challenge — optional challenge object (enriched, with .periods array)
-//               When provided, activities and periods come from the challenge.
 export default function HistoryTab({ challenge }) {
   const { student } = useAuth();
-  const { activitiesForGroup, activePeriod, periodsForGroup } = useApp();
+  const {
+    activitiesForGroup, activePeriod, periodsForGroup,
+    allowPastSubmissions, submitPastDay,
+  } = useApp();
 
   const isChallenge = !!challenge;
 
@@ -51,7 +51,6 @@ export default function HistoryTab({ challenge }) {
     ? (challenge.periods || [])
     : periodsForGroup(student.groupId);
 
-  // Period selector options
   const periodOptions = useMemo(() => {
     const opts = [];
     if (period) {
@@ -76,7 +75,6 @@ export default function HistoryTab({ challenge }) {
 
   const selOption = periodOptions.find(o => o.value === selValue) || periodOptions[0];
 
-  // In challenge mode activities come from the selected period (not challenge.activities)
   const allActivities = isChallenge
     ? (selOption?.periodObj?.activities || [])
     : activitiesForGroup(student.groupId);
@@ -84,15 +82,16 @@ export default function HistoryTab({ challenge }) {
     ? allActivities.filter(a => a.isActive ?? true)
     : allActivities.filter(a => a.isActive ?? a.active ?? true);
 
-  // Choose date columns based on selection
-  const dates = useMemo(() => {
-    if (!selOption || !selOption.periodObj) return lastNDays(14);
-    const pd = dateRange(selOption.periodObj.startDate, selOption.periodObj.endDate, 14);
-    return pd.length > 0 ? pd : lastNDays(14);
-  }, [selOption]);
+  const today = new Date().toISOString().split('T')[0];
 
-  // Build lookup: date → completedActivities set
-  // In challenge mode, only include submissions whose period_id matches the selected period.
+  const dates = useMemo(() => {
+    const max = allowPastSubmissions ? 365 : 14;
+    if (!selOption || !selOption.periodObj) return lastNDays(allowPastSubmissions ? 30 : 14);
+    const pd = dateRange(selOption.periodObj.startDate, selOption.periodObj.endDate, max);
+    return pd.length > 0 ? pd : lastNDays(allowPastSubmissions ? 30 : 14);
+  }, [selOption, allowPastSubmissions]);
+
+  // Build lookup: date → Set of completedActivityIds
   const subMap = useMemo(() => {
     const m = {};
     const selectedPeriodId = isChallenge ? (selOption?.periodObj?.id || null) : null;
@@ -105,7 +104,7 @@ export default function HistoryTab({ challenge }) {
     return m;
   }, [student, isChallenge, selOption]);
 
-  // Summary stats — challenge mode uses stored submission.points by period_id
+  // Summary stats
   const totalPts = isChallenge
     ? (() => {
         const periodIds = new Set((challenge.periods || []).map(p => p.id));
@@ -121,11 +120,63 @@ export default function HistoryTab({ challenge }) {
             .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0)
         : getStudentPeriodPoints(student, allActivities, period.startDate, period.endDate))
     : null;
-  // In challenge mode derive active days from the filtered subMap so old
-  // group submissions don't inflate the count.
   const totalDays = isChallenge ? Object.keys(subMap).length : getStudentActiveDays(student);
 
   const hasAnySubmission = Object.keys(subMap).length > 0;
+
+  // ── Editable mode state ───────────────────────────────────────
+  const [expandedDate, setExpandedDate] = useState(null);
+  const [editChecks,   setEditChecks]   = useState({});
+  const [savingDate,   setSavingDate]   = useState(null);
+
+  function getActivitiesForDate(dateStr) {
+    if (isChallenge) {
+      const p = (challenge.periods || []).find(p => dateStr >= p.startDate && dateStr <= p.endDate);
+      return (p?.activities || []).filter(a => a.isActive ?? true);
+    }
+    const groupPds = periodsForGroup(student.groupId);
+    const p = groupPds.find(pd => dateStr >= pd.startDate && dateStr <= pd.endDate);
+    if (p) return (p.activities || []).filter(a => a.isActive ?? a.active ?? true);
+    return activities;
+  }
+
+  function openDate(dateStr) {
+    setExpandedDate(dateStr);
+    const existing = subMap[dateStr];
+    setEditChecks(prev => ({
+      ...prev,
+      [dateStr]: existing ? [...existing] : [],
+    }));
+  }
+
+  function closeDate() {
+    setExpandedDate(null);
+  }
+
+  function toggleCheck(dateStr, actId) {
+    setEditChecks(prev => {
+      const checks = prev[dateStr] || [];
+      const idx = checks.indexOf(actId);
+      return {
+        ...prev,
+        [dateStr]: idx >= 0 ? checks.filter(id => id !== actId) : [...checks, actId],
+      };
+    });
+  }
+
+  const handleSave = useCallback(async (dateStr) => {
+    setSavingDate(dateStr);
+    const checks = editChecks[dateStr] || [];
+    await submitPastDay(student.id, dateStr, checks, isChallenge ? challenge.id : null);
+    setSavingDate(null);
+    setExpandedDate(null);
+  }, [editChecks, submitPastDay, student.id, isChallenge, challenge]);
+
+  // Dates shown in editable mode: all dates in range, past only, newest first
+  const editDates = useMemo(
+    () => [...dates].reverse().filter(d => d <= today),
+    [dates, today],
+  );
 
   return (
     <div className="mt-6 space-y-5">
@@ -143,7 +194,7 @@ export default function HistoryTab({ challenge }) {
         <div>
           <select
             value={selValue}
-            onChange={e => setSelValue(e.target.value)}
+            onChange={e => { setSelValue(e.target.value); setExpandedDate(null); }}
             className="w-full bg-bg-card2 border border-border text-primary rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
           >
             {periodOptions.map(o => (
@@ -158,112 +209,194 @@ export default function HistoryTab({ challenge }) {
         </div>
       )}
 
-      {!hasAnySubmission ? (
-        <EmptyState icon="📅" title="No submissions yet" text="Complete your daily activities to see them here." />
-      ) : (
-        /* Grid: rows = activities, cols = dates */
-        <div className="overflow-x-auto -mx-4 px-4">
-          <table className="min-w-full" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
-            <thead>
-              <tr>
-                {/* Activity label column header */}
-                <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-3 whitespace-nowrap sticky left-0 bg-bg z-10 min-w-[120px]">
-                  Activity
-                </th>
-                {dates.map(d => (
-                  <th key={d} className="text-center text-xs text-muted pb-2 px-1 whitespace-nowrap min-w-[36px]">
-                    {formatDateShort(d).replace(/\s/g, '\n')}
-                  </th>
-                ))}
-                <th className="text-right text-xs font-semibold text-muted uppercase tracking-wide pb-2 pl-3 whitespace-nowrap">
-                  Pts
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {activities.map((a, rowIdx) => {
-                // Total points earned for this activity across all submitted dates in range
-                const actPts = dates.reduce((sum, d) => {
-                  return sum + (subMap[d]?.has(a.id) ? a.points : 0);
-                }, 0);
+      {/* ── EDITABLE mode ─────────────────────────────────────── */}
+      {allowPastSubmissions ? (
+        editDates.length === 0 ? (
+          <EmptyState icon="📅" title="No dates available" text="No past dates found for this period." />
+        ) : (
+          <div className="space-y-2">
+            {editDates.map(d => {
+              const dateActivities = getActivitiesForDate(d);
+              const isExpanded = expandedDate === d;
+              const checks     = editChecks[d] || [];
+              const isSaving   = savingDate === d;
+              const hasSubmission = !!subMap[d];
+              const submittedPts = hasSubmission
+                ? dateActivities.reduce((sum, a) => sum + (subMap[d].has(a.id) ? a.points : 0), 0)
+                : 0;
+              const editPts = dateActivities.reduce((sum, a) => sum + (checks.includes(a.id) ? a.points : 0), 0);
 
-                return (
-                  <tr key={a.id} className={rowIdx % 2 === 0 ? 'bg-bg' : 'bg-bg-card2'}>
-                    {/* Activity name — sticky left */}
-                    <td className={`text-xs text-primary font-medium pr-3 py-2 sticky left-0 z-10 whitespace-nowrap
-                      ${rowIdx % 2 === 0 ? 'bg-bg' : 'bg-bg-card2'}`}>
-                      {a.name}
+              return (
+                <div key={d} className="border border-border rounded-xl overflow-hidden bg-bg-card2">
+                  {/* Row header */}
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[var(--gold-subtle)] transition-colors"
+                    onClick={() => isExpanded ? closeDate() : openDate(d)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-primary">{formatDate(d)}</span>
+                      {hasSubmission
+                        ? <span className="text-xs font-semibold text-gold bg-[var(--gold-subtle)] border border-gold-d rounded-md px-2 py-0.5">+{submittedPts} pts</span>
+                        : <span className="text-xs text-muted">Not submitted</span>
+                      }
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-muted flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Expanded panel */}
+                  {isExpanded && (
+                    <div className="border-t border-border px-4 py-4 space-y-3 bg-bg">
+                      {dateActivities.length === 0 ? (
+                        <p className="text-xs text-muted">No activities found for this date's period.</p>
+                      ) : (
+                        <>
+                          <div className="space-y-2.5">
+                            {dateActivities.map(a => {
+                              const checked = checks.includes(a.id);
+                              return (
+                                <label key={a.id} className="flex items-center gap-3 cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleCheck(d, a.id)}
+                                    className="w-4 h-4 rounded accent-gold cursor-pointer"
+                                  />
+                                  <span className="flex-1 text-sm text-primary group-hover:text-gold transition-colors">{a.name}</span>
+                                  <span className="text-xs text-muted">+{a.points}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 border-t border-border">
+                            <span className="text-sm font-semibold text-gold">
+                              Total: {editPts} pts
+                            </span>
+                            <Button
+                              size="sm"
+                              onClick={() => handleSave(d)}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? 'Saving…' : 'Save'}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        /* ── READ-ONLY mode (unchanged) ──────────────────────── */
+        !hasAnySubmission ? (
+          <EmptyState icon="📅" title="No submissions yet" text="Complete your daily activities to see them here." />
+        ) : (
+          <>
+            <div className="overflow-x-auto -mx-4 px-4">
+              <table className="min-w-full" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
+                <thead>
+                  <tr>
+                    <th className="text-left text-xs font-semibold text-muted uppercase tracking-wide pb-2 pr-3 whitespace-nowrap sticky left-0 bg-bg z-10 min-w-[120px]">
+                      Activity
+                    </th>
+                    {dates.map(d => (
+                      <th key={d} className="text-center text-xs text-muted pb-2 px-1 whitespace-nowrap min-w-[36px]">
+                        {formatDateShort(d).replace(/\s/g, '\n')}
+                      </th>
+                    ))}
+                    <th className="text-right text-xs font-semibold text-muted uppercase tracking-wide pb-2 pl-3 whitespace-nowrap">
+                      Pts
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {activities.map((a, rowIdx) => {
+                    const actPts = dates.reduce((sum, d) => {
+                      return sum + (subMap[d]?.has(a.id) ? a.points : 0);
+                    }, 0);
+
+                    return (
+                      <tr key={a.id} className={rowIdx % 2 === 0 ? 'bg-bg' : 'bg-bg-card2'}>
+                        <td className={`text-xs text-primary font-medium pr-3 py-2 sticky left-0 z-10 whitespace-nowrap
+                          ${rowIdx % 2 === 0 ? 'bg-bg' : 'bg-bg-card2'}`}>
+                          {a.name}
+                        </td>
+                        {dates.map(d => {
+                          const done = subMap[d]?.has(a.id);
+                          const hasAnySub = !!subMap[d];
+                          return (
+                            <td key={d} className="text-center px-1 py-2">
+                              <span
+                                className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-sm font-bold transition-colors
+                                  ${done
+                                    ? 'bg-[var(--gold-subtle)] text-gold border border-gold-d'
+                                    : hasAnySub
+                                      ? 'bg-bg-card2 text-muted border border-border opacity-40'
+                                      : 'opacity-0 pointer-events-none'
+                                  }
+                                `}
+                              >
+                                {done ? '✓' : hasAnySub ? '—' : ''}
+                              </span>
+                            </td>
+                          );
+                        })}
+                        <td className="text-right text-xs font-semibold pl-3 py-2 whitespace-nowrap">
+                          {actPts > 0
+                            ? <span className="text-gold">+{actPts}</span>
+                            : <span className="text-muted">—</span>
+                          }
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td className="text-xs font-semibold text-muted pt-3 pr-3 sticky left-0 bg-bg z-10 uppercase tracking-wide border-t border-border">
+                      Day total
                     </td>
-                    {/* One cell per date */}
                     {dates.map(d => {
-                      const done = subMap[d]?.has(a.id);
-                      const hasAnySub = !!subMap[d];
+                      const dayPts = activities.reduce((sum, a) => {
+                        return sum + (subMap[d]?.has(a.id) ? a.points : 0);
+                      }, 0);
                       return (
-                        <td key={d} className="text-center px-1 py-2">
-                          <span
-                            className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-sm font-bold transition-colors
-                              ${done
-                                ? 'bg-[var(--gold-subtle)] text-gold border border-gold-d'
-                                : hasAnySub
-                                  ? 'bg-bg-card2 text-muted border border-border opacity-40'
-                                  : 'opacity-0 pointer-events-none'
-                              }
-                            `}
-                          >
-                            {done ? '✓' : hasAnySub ? '—' : ''}
-                          </span>
+                        <td key={d} className="text-center text-xs pt-3 px-1 border-t border-border">
+                          {dayPts > 0
+                            ? <span className="font-bold text-gold">{dayPts}</span>
+                            : <span className="text-border">—</span>
+                          }
                         </td>
                       );
                     })}
-                    {/* Row total */}
-                    <td className="text-right text-xs font-semibold pl-3 py-2 whitespace-nowrap">
-                      {actPts > 0
-                        ? <span className="text-gold">+{actPts}</span>
-                        : <span className="text-muted">—</span>
-                      }
-                    </td>
+                    <td className="border-t border-border" />
                   </tr>
-                );
-              })}
-            </tbody>
-            {/* Column totals row */}
-            <tfoot>
-              <tr>
-                <td className="text-xs font-semibold text-muted pt-3 pr-3 sticky left-0 bg-bg z-10 uppercase tracking-wide border-t border-border">
-                  Day total
-                </td>
-                {dates.map(d => {
-                  const dayPts = activities.reduce((sum, a) => {
-                    return sum + (subMap[d]?.has(a.id) ? a.points : 0);
-                  }, 0);
-                  return (
-                    <td key={d} className="text-center text-xs pt-3 px-1 border-t border-border">
-                      {dayPts > 0
-                        ? <span className="font-bold text-gold">{dayPts}</span>
-                        : <span className="text-border">—</span>
-                      }
-                    </td>
-                  );
-                })}
-                <td className="border-t border-border" />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+                </tfoot>
+              </table>
+            </div>
 
-      {/* Legend */}
-      {hasAnySubmission && (
-        <div className="flex items-center gap-4 text-xs text-muted pt-1">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[var(--gold-subtle)] border border-gold-d text-gold font-bold text-xs">✓</span>
-            Completed
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-bg-card2 border border-border text-muted text-xs">—</span>
-            Missed
-          </span>
-        </div>
+            {/* Legend */}
+            <div className="flex items-center gap-4 text-xs text-muted pt-1">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-[var(--gold-subtle)] border border-gold-d text-gold font-bold text-xs">✓</span>
+                Completed
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-bg-card2 border border-border text-muted text-xs">—</span>
+                Missed
+              </span>
+            </div>
+          </>
+        )
       )}
     </div>
   );
