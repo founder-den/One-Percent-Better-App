@@ -692,7 +692,7 @@ export default function HomeTab({ onEditProfile }) {
   );
 
   // ── Computed stats ───────────────────────────────────────────────
-  const totalPoints   = useMemo(() => getStudentTotalPoints(student, activities),   [student, activities]);
+  const totalPoints   = useMemo(() => getStudentGrandTotal(student, student.submissions || []), [student]);
   const currentStreak = useMemo(() => getStudentStreak(student),                    [student]);
   const activeDays    = useMemo(() => getStudentActiveDays(student),                [student]);
   const bestStreak    = useMemo(() => calcBestStreak(student),                      [student]);
