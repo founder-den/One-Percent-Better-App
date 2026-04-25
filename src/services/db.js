@@ -257,6 +257,18 @@ export async function loadAll() {
     'challenges', 'challenge_memberships', 'announcements',
   ];
 
+  const { data: periodsData, error: periodsError, status, statusText } = await supabase
+    .from('periods')
+    .select('*')
+
+  console.log('[db] periods query result:', {
+    data: periodsData,
+    error: periodsError,
+    status,
+    statusText,
+    count: periodsData?.length
+  })
+
   const [
     { data: studentRows,      error: e1  },
     { data: submissionRows,   error: e2  },
@@ -282,7 +294,7 @@ export async function loadAll() {
     supabase.from('books').select('*'),
     supabase.from('program_completions').select('*'),
     supabase.from('activities').select('*'),
-    supabase.from('periods').select('*'),   // select(*) — ensures the activities jsonb column is always included
+    Promise.resolve({ data: periodsData, error: periodsError }),
     supabase.from('global_tasbihs').select('*'),
     supabase.from('personal_tasbih_templates').select('*'),
     supabase.from('programs').select('*'),

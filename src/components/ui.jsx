@@ -375,53 +375,53 @@ export function PasswordInput({ label, error, hint, className = '', ...props }) 
 }
 
 // ─── Weekly bar chart ─────────────────────────────────────────────
-// days: [{ dateStr, points, isToday, isPast }]  — 7 entries Mon→Sun
-const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+// Props: submissions (array), challengePeriodIds (array of period IDs), isChallenge (bool)
+export function WeeklyChart({ submissions, challengePeriodIds, isChallenge }) {
+  const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+  const today = new Date()
 
-export function WeeklyChart({ days }) {
-  console.log('[WeeklyChart] days received:', days.map(d => ({ date: d.dateStr, pts: d.points, isToday: d.isToday })));
-  const maxPts = Math.max(1, ...days.map(d => d.points));
+  const startOfWeek = new Date(today)
+  const dayOfWeek = today.getDay()
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+  startOfWeek.setDate(today.getDate() - diff)
+  startOfWeek.setHours(0, 0, 0, 0)
+
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek)
+    d.setDate(startOfWeek.getDate() + i)
+    return d.toISOString().split('T')[0]
+  })
+
+  const relevantSubs = isChallenge
+    ? (submissions || []).filter(s => challengePeriodIds?.includes(s.period_id) || challengePeriodIds?.includes(s.periodId))
+    : (submissions || [])
+
+  const pointsByDay = weekDates.map(dateStr => {
+    const daySubs = relevantSubs.filter(s => s.date === dateStr)
+    return daySubs.reduce((sum, s) => sum + (s.points || s.scoreOverride || 0), 0)
+  })
+
+  const maxPoints = Math.max(...pointsByDay, 1)
+
   return (
-    <div className="w-full select-none">
-      <div className="flex items-end gap-1.5 h-20 mb-1">
-        {days.map((day, i) => {
-          const barH = day.points > 0
-            ? Math.max(6, Math.round((day.points / maxPts) * 68))
-            : 3;
-          const barColor = day.isToday
-            ? 'var(--gold)'
-            : (day.isPast && day.points > 0)
-            ? 'var(--success)'
-            : 'var(--border)';
-          return (
-            <div key={day.dateStr} className="flex-1 flex flex-col items-center justify-end h-full gap-0.5">
-              {day.points > 0 && (
-                <span className="text-[9px] font-bold leading-none" style={{ color: day.isToday ? 'var(--gold)' : 'var(--success)' }}>
-                  {day.points}
-                </span>
-              )}
-              <div
-                className="w-full rounded-sm transition-all duration-300"
-                style={{ height: `${barH}px`, backgroundColor: barColor, opacity: !day.isPast && !day.isToday ? 0.3 : 1 }}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-1.5">
-        {days.map((day, i) => (
-          <div key={day.dateStr} className="flex-1 text-center">
-            <span
-              className="text-[10px] font-semibold"
-              style={{ color: day.isToday ? 'var(--gold)' : 'var(--text-muted)' }}
-            >
-              {DAY_LABELS[i]}
-            </span>
-          </div>
-        ))}
-      </div>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px', padding: '0 4px' }}>
+      {pointsByDay.map((pts, i) => (
+        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+          {pts > 0 && (
+            <span style={{ fontSize: '10px', marginBottom: '2px', color: '#666' }}>{pts}</span>
+          )}
+          <div style={{
+            width: '100%',
+            height: pts > 0 ? `${(pts / maxPoints) * 100}%` : '2px',
+            backgroundColor: pts > 0 ? '#2d6a4f' : '#e0e0e0',
+            borderRadius: '3px 3px 0 0',
+            minHeight: '2px'
+          }} />
+          <span style={{ fontSize: '11px', marginTop: '4px', color: '#999' }}>{days[i]}</span>
+        </div>
+      ))}
     </div>
-  );
+  )
 }
 
 // ─── Countdown timer to period end ────────────────────────────────

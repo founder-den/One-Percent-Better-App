@@ -20,22 +20,6 @@ const DAY_OPTS = [
   { value: 'yesterday', label: 'Yesterday' },
 ];
 
-function pad2(n) { return String(n).padStart(2, '0'); }
-
-function getWeekDays() {
-  const today  = new Date();
-  const dow    = today.getDay();
-  const offset = dow === 0 ? -6 : 1 - dow;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + offset);
-  const todayStr = todayString();
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const dateStr = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-    return { dateStr, points: 0, isToday: dateStr === todayStr, isPast: dateStr < todayStr };
-  });
-}
 
 // ─────────────────────────────────────────────────────────────────
 // Props:
@@ -109,38 +93,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
     : buildLeaderboard(groupStudents, allActivities, 'total');
   const myRank = lb.find(r => r.id === student.id)?.rank ?? '—';
 
-  // ── Weekly chart ───────────────────────────────────────────────
-  // Build chart data directly from stored submission.points — no activity
-  // recalculation needed, and no dependency on allActivities being loaded.
-  // In challenge mode, only include submissions that belong to this challenge's
-  // periods (matched by periodId) so the chart reflects challenge progress.
-  const weekDays = useMemo(() => {
-    const days = getWeekDays();
-    const periodIds = isChallenge
-      ? new Set((challenge?.periods || []).map(p => p.id))
-      : null;
-
-    console.log('[DashboardTab] weekDays — building chart data:', {
-      isChallenge,
-      challengePeriodCount: isChallenge ? (challenge?.periods || []).length : 'N/A',
-      studentSubCount: (student.submissions || []).length,
-      periodIds: periodIds ? [...periodIds] : 'N/A',
-    });
-
-    return days.map(day => {
-      const sub = (student.submissions || []).find(s => {
-        if (s.date !== day.dateStr) return false;
-        if (periodIds !== null) return s.periodId && periodIds.has(s.periodId);
-        return true;
-      });
-      const pts = sub
-        ? (typeof sub.scoreOverride === 'number' ? sub.scoreOverride
-          : typeof sub.points === 'number' ? sub.points
-          : 0)
-        : 0;
-      return { ...day, points: pts };
-    });
-  }, [student, challenge, isChallenge]);
+  const challengePeriodIds = isChallenge ? (challenge?.periods || []).map(p => p.id) : [];
 
   const todayStr = todayString();
   const todaySub = (student.submissions || []).find(s => s.date === todayStr);
@@ -191,7 +144,7 @@ export default function DashboardTab({ challenge, memberStudents }) {
       {/* ── Weekly chart ─────────────────────────────────────────── */}
       <Card className="!pb-4">
         <SectionHeading>This Week</SectionHeading>
-        <WeeklyChart days={weekDays} />
+        <WeeklyChart submissions={student.submissions} challengePeriodIds={challengePeriodIds} isChallenge={isChallenge} />
         <div className="mt-4 pt-4 border-t border-border">
           <p className="text-xs font-semibold text-muted uppercase tracking-widest mb-2">
             Streak: <span className="text-gold">{streak} 🔥</span>

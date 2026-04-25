@@ -522,7 +522,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
               {recentSubs.map(sub => (
                 <div key={sub.date} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-card2)', border: '1px solid var(--border)', borderRadius: '8px' }}>
                   <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(sub.date)}</span>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{submissionPoints(sub, getActivitiesForSub(sub))}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>+{sub.points || sub.scoreOverride || 0}</span>
                 </div>
               ))}
             </div>
