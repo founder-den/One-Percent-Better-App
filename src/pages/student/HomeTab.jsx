@@ -395,7 +395,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
       const ch = challenges.find(c => c.id === m.challengeId);
       if (!ch) return null;
       const subs = (s.submissions || []).filter(sub => sub.date >= ch.startDate && sub.date <= ch.endDate);
-      const pts = subs.reduce((sum, sub) => sum + Number(submissionPoints(sub, ch.activities || []) || 0), 0);
+      const pts = subs.reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
       return { label: ch.name, pts };
     }).filter(Boolean);
     const bonusPts = (s.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
@@ -486,7 +486,7 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-card2)', border: '1px solid var(--gold)', borderRadius: '8px', marginTop: '2px' }}>
                 <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>Total</span>
-                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{pointsBreakdown.total} pts</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--gold)' }}>{totalPoints} pts</span>
               </div>
             </div>
           </div>
