@@ -393,10 +393,6 @@ function ChallengeDataTab({ challenge, students, memberships }) {
 
   const memberStudents = students.filter(s => memberIds.includes(s.id));
 
-  // Collect all activities across all periods (for display/stats only)
-  const allPeriodActivities = (challenge.periods || []).flatMap(p => p.activities || []);
-  const activities = allPeriodActivities.length > 0 ? allPeriodActivities : (challenge.activities || []);
-
   const allSubs = memberStudents.flatMap(s =>
     (s.submissions || [])
       .filter(sub => isValidChallengeSub(sub, challenge))
@@ -408,21 +404,31 @@ function ChallengeDataTab({ challenge, students, memberships }) {
   const submittedCount = submittedIds.size;
   const submissionPct  = totalMembers > 0 ? (submittedCount / totalMembers) * 100 : 0;
 
+  // Bug 4: Only show activities and completion rates for the active period
+  const activePeriod = (challenge.periods || []).find(p => p.isActive) || null;
+  const activities = (activePeriod?.activities || []).length > 0
+    ? (activePeriod.activities || [])
+    : (challenge.activities || []);
+  const activePeriodSubs = activePeriod
+    ? allSubs.filter(sub => sub.periodId === activePeriod.id)
+    : allSubs;
+
   const activityStats = activities.map(act => {
-    const count = allSubs.filter(sub =>
+    const count = activePeriodSubs.filter(sub =>
       (sub.completedActivities || []).some(ca =>
         (typeof ca === 'string' ? ca : ca?.id) === act.id
       )
     ).length;
-    const pct = allSubs.length > 0 ? (count / allSubs.length) * 100 : 0;
+    const pct = activePeriodSubs.length > 0 ? (count / activePeriodSubs.length) * 100 : 0;
     return { ...act, count, pct };
   });
 
+  // Bug 3: Read stored sub.points instead of recalculating from activities
   const leaderboard = memberStudents
     .map(s => {
       const pts = (s.submissions || [])
         .filter(sub => isValidChallengeSub(sub, challenge))
-        .reduce((sum, sub) => sum + challengeSubPoints(sub, challenge), 0);
+        .reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
       return { ...s, pts };
     })
     .sort((a, b) => b.pts - a.pts)

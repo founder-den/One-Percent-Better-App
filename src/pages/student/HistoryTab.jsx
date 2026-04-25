@@ -92,20 +92,18 @@ export default function HistoryTab({ challenge }) {
   }, [selOption]);
 
   // Build lookup: date → completedActivities set
-  // In challenge mode, only include submissions whose period_id belongs to this challenge.
+  // In challenge mode, only include submissions whose period_id matches the selected period.
   const subMap = useMemo(() => {
     const m = {};
-    const challengePeriodIds = isChallenge
-      ? new Set((challenge.periods || []).map(p => p.id))
-      : null;
+    const selectedPeriodId = isChallenge ? (selOption?.periodObj?.id || null) : null;
     (student.submissions || []).forEach(s => {
-      if (challengePeriodIds) {
-        if (!s.periodId || !challengePeriodIds.has(s.periodId)) return;
+      if (isChallenge) {
+        if (!selectedPeriodId || s.periodId !== selectedPeriodId) return;
       }
       m[s.date] = new Set(s.completedActivities || []);
     });
     return m;
-  }, [student, isChallenge, challenge]);
+  }, [student, isChallenge, selOption]);
 
   // Summary stats — challenge mode uses stored submission.points by period_id
   const totalPts = isChallenge
