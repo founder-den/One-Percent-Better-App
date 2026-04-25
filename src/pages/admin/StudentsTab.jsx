@@ -6,7 +6,7 @@ import {
   Modal, Input, ChecklistItem, Alert,
 } from '../../components/ui.jsx';
 import { formatDate, todayString } from '../../services/data.js';
-import { submissionPoints } from '../../services/calculations.js';
+import { getStudentGrandTotal } from '../../services/calculations.js';
 
 // Days between two YYYY-MM-DD strings (later minus earlier)
 function daysBetween(earlier, later) {
@@ -73,19 +73,6 @@ export default function StudentsTab({ groupId }) {
       if (matchedPd) return matchedPd.activities || [];
     }
     return groupActs;
-  }
-
-  // Total points — uses stored sub.points so the header always matches what
-  // was earned at submit time, regardless of whether activities are resolvable.
-  function calcStudentTotalPts(st) {
-    const actPts = (st.submissions || []).reduce((sum, sub) => {
-      const pts = typeof sub.scoreOverride === 'number' ? sub.scoreOverride
-        : typeof sub.points === 'number' ? sub.points
-        : submissionPoints(sub, getActivitiesForSub(sub, st.id));
-      return sum + pts;
-    }, 0);
-    const bonus = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
-    return actPts + bonus;
   }
 
   const pending = groupStudents.filter(s => s.status === 'pending');
@@ -275,7 +262,7 @@ export default function StudentsTab({ groupId }) {
         )}
         {active.map(st => {
           const isExpanded    = expandedStudentId === st.id;
-          const totalPts      = calcStudentTotalPts(st);
+          const totalPts      = getStudentGrandTotal(st, st.submissions || []);
           const subs          = [...(st.submissions || [])].sort((a, b) => b.date.localeCompare(a.date));
           const bonusPtsTotal = (st.bonusPoints || []).reduce((s, b) => s + (b.points || 0), 0);
           const streak        = calcStreak(subs, today);
@@ -423,10 +410,7 @@ export default function StudentsTab({ groupId }) {
                               {pagedSubs.map(sub => {
                                 const subActs   = getActivitiesForSub(sub, st.id);
                                 const subActMap = Object.fromEntries(subActs.map(a => [a.id, a.name || a.id]));
-                                // Use stored points — recalculation gives 0 when activity map is empty
-                                const pts = typeof sub.scoreOverride === 'number' ? sub.scoreOverride
-                                  : typeof sub.points === 'number' ? sub.points
-                                  : submissionPoints(sub, subActs);
+                                const pts = sub.points || sub.scoreOverride || 0;
                                 // Filter out IDs that can't be resolved to a name
                                 const actNames  = (sub.completedActivities || [])
                                   .map(id => subActMap[id] || null)
