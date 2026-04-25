@@ -322,7 +322,7 @@ export function AppProvider({ children }) {
     };
     setStudents(s => s.map(st => {
       if (st.id !== studentId) return st;
-      const already = (st.submissions || []).some(x => x.date === dateStr);
+      const already = (st.submissions || []).some(x => x.date === dateStr && x.periodId === (activePd?.id ?? null));
       if (already) return st;
       return { ...st, submissions: [...(st.submissions || []), sub] };
     }));

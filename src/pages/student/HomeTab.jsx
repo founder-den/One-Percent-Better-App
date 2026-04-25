@@ -394,7 +394,8 @@ function PublicProfileModal({ s, activities, allStudents, groupActivities, group
     const rows = myMemberships.map(m => {
       const ch = challenges.find(c => c.id === m.challengeId);
       if (!ch) return null;
-      const subs = (s.submissions || []).filter(sub => sub.date >= ch.startDate && sub.date <= ch.endDate);
+      const periodIds = new Set((ch.periods || []).map(p => p.id));
+      const subs = (s.submissions || []).filter(sub => sub.periodId && periodIds.has(sub.periodId));
       const pts = subs.reduce((sum, sub) => sum + (typeof sub.points === 'number' ? sub.points : 0), 0);
       return { label: ch.name, pts };
     }).filter(Boolean);

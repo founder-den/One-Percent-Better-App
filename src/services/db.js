@@ -660,8 +660,8 @@ export async function dbDeleteStudent(id) {
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
 export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points, periodId) {
   console.log('[db] submitDay:', studentId, dateStr);
-  const { data: existing } = await supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
-  if (existing) { console.log('Submission already exists for this date'); return true; }
+  const { data: existing } = await supabase.from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).eq('period_id', periodId ?? null).maybeSingle();
+  if (existing) { console.log('Submission already exists for this date + period'); return true; }
 
   const { error } = await supabase.from('submissions').insert({
     id:                   generateId(),
