@@ -23,6 +23,7 @@ function mapStudent(row, submissions = [], bonusPoints = [], books = [], program
     university:             row.university || '',
     phone:                  row.phone || '',
     avatar:                 row.avatar ?? null,
+    tasbih_count:           row.tasbih_count ?? 0,
     tasbih:                 row.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
     personalTasbihProgress: row.personal_tasbih_progress || {},
     personalTasbihs:        row.personal_tasbihs || [],
@@ -783,11 +784,12 @@ export async function dbDeleteBonusPoints(_studentId, bonusId) {
 }
 
 // ─── STUDENT TASBIH ───────────────────────────────────────────────
-export async function dbUpdateTasbih(studentId, tasbih) {
-  console.log('[db] updateTasbih:', studentId);
-  const { error } = await supabase.from('students').update({ tasbih }).eq('id', studentId);
-  if (error) { console.error('[db] updateTasbih — Supabase write FAILED:', error); return false; }
-  return true;
+export async function dbUpdateTasbih(studentId, count) {
+  const { error } = await supabase
+    .from('students')
+    .update({ tasbih_count: count })
+    .eq('id', studentId);
+  if (error) throw error;
 }
 
 // ─── GLOBAL TASBIH ────────────────────────────────────────────────

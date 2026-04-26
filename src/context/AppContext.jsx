@@ -471,13 +471,14 @@ export function AppProvider({ children }) {
     }));
   }, []);
 
-  const saveTasbih = useCallback(async (student, tasbih) => {
-    console.log('[AppContext] saveTasbih:', { studentId: student?.id });
-    if (!student?.id) { console.warn('[AppContext] saveTasbih — called with null student, skipping'); return null; }
-    const ok = await dbUpdateTasbih(student.id, tasbih);
-    if (!ok) { console.error('[AppContext] saveTasbih failed — state NOT updated'); return student; }
-    setStudents(s => s.map(st => st.id === student.id ? { ...st, tasbih } : st));
-    return { ...student, tasbih };
+  const saveTasbih = useCallback(async (student, count) => {
+    if (!student?.id) return;
+    try {
+      await dbUpdateTasbih(student.id, count);
+      setStudents(s => s.map(st => st.id === student.id ? { ...st, tasbih_count: count } : st));
+    } catch (err) {
+      console.error('[AppContext] saveTasbih error:', err);
+    }
   }, []);
 
   // ── Student personal tasbihs ──────────────────────────────────

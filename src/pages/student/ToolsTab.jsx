@@ -459,48 +459,31 @@ function StudentTasbihCard({ pt, studentId }) {
 }
 
 export function PersonalTasbih() {
-  const { student, refreshStudent } = useAuth();
+  const { student } = useAuth();
   const { saveTasbih, personalTasbihTemplates, addPersonalTasbih } = useApp();
-  const today = todayString();
+  const [count, setCount] = useState(0);
 
   // State for add-tasbih form
   const [showAddForm, setShowAddForm]   = useState(false);
   const [addForm, setAddForm]           = useState({ title: '', target: '', resetType: 'none' });
   const [addErr, setAddErr]             = useState('');
 
-  function initTasbih() {
-    const t = student.tasbih || {
-      allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false,
-    };
-    if (t.dailyResetEnabled && t.lastUpdatedDate !== today) {
-      return { ...t, todayCount: 0, lastUpdatedDate: today };
-    }
-    return t;
-  }
-
-  const [tasbih, setTasbih] = useState(initTasbih);
-
   useEffect(() => {
-    const updated = saveTasbih(student, tasbih);
-    if (updated) refreshStudent(updated);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasbih]);
+    if (!student) return;
+    setCount(student.tasbih_count ?? 0);
+  }, [student?.id]);
 
-  function add(n) {
-    setTasbih(t => ({
-      ...t,
-      todayCount:      t.todayCount + n,
-      allTimeTotal:    t.allTimeTotal + n,
-      lastUpdatedDate: today,
-    }));
+  async function add(n) {
+    if (!student?.id) return;
+    const newCount = count + n;
+    setCount(newCount);
+    await saveTasbih(student, newCount);
   }
 
-  function resetToday() {
-    setTasbih(t => ({ ...t, todayCount: 0, lastUpdatedDate: today }));
-  }
-
-  function toggleDailyReset() {
-    setTasbih(t => ({ ...t, dailyResetEnabled: !t.dailyResetEnabled }));
+  async function resetToday() {
+    if (!student?.id) return;
+    setCount(0);
+    await saveTasbih(student, 0);
   }
 
   function handleAdd() {
@@ -514,7 +497,8 @@ export function PersonalTasbih() {
     setAddErr('');
   }
 
-  // Filter templates visible to this student's group
+  if (!student) return null;
+
   const visibleTemplates = personalTasbihTemplates.filter(t =>
     t.isActive &&
     (t.groupScope === 'all' ||
@@ -537,40 +521,16 @@ export function PersonalTasbih() {
             title="Tap to count"
           >
             <span className="font-serif font-bold text-5xl text-gold leading-none">
-              {tasbih.todayCount}
+              {count}
             </span>
-            <span className="text-xs text-muted mt-1">Today</span>
           </div>
-          <p className="mt-3 text-sm text-muted">
-            All-time:{' '}
-            <span className="text-gold font-semibold">{tasbih.allTimeTotal.toLocaleString()}</span>
-          </p>
         </div>
 
         <div className="flex gap-2 justify-center mb-3">
           <Button variant="outline" size="sm" onClick={() => add(10)}>+10</Button>
           <Button variant="outline" size="sm" onClick={() => add(100)}>+100</Button>
         </div>
-        <Button variant="ghost" size="sm" full onClick={resetToday}>Reset Today's Count</Button>
-
-        <label className="flex items-center justify-between cursor-pointer mt-4 pt-4 border-t border-border">
-          <div>
-            <p className="text-sm text-primary font-medium">Daily Auto-Reset</p>
-            <p className="text-xs text-muted">Resets today's count each new day</p>
-          </div>
-          <div
-            role="switch"
-            aria-checked={tasbih.dailyResetEnabled}
-            tabIndex={0}
-            onClick={toggleDailyReset}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') toggleDailyReset(); }}
-            className={`relative w-11 h-6 rounded-full border-2 transition-colors cursor-pointer flex-shrink-0
-              ${tasbih.dailyResetEnabled ? 'bg-gold border-gold' : 'bg-surface border-border'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform
-              ${tasbih.dailyResetEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-          </div>
-        </label>
+        <Button variant="ghost" size="sm" full onClick={resetToday}>Reset Count</Button>
       </Card>
 
       {/* My Tasbihs — student-created personal counters */}
