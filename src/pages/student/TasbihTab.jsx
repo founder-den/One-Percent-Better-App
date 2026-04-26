@@ -12,7 +12,7 @@ export default function TasbihTab() {
 
   // Load tasbih state from student, applying daily reset if needed
   function initTasbih() {
-    const t = student.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false };
+    const t = student?.tasbih || { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false };
     if (t.dailyResetEnabled && t.lastUpdatedDate !== today) {
       return { ...t, todayCount: 0, lastUpdatedDate: today };
     }
@@ -21,8 +21,10 @@ export default function TasbihTab() {
 
   const [tasbih, setTasbih] = useState(initTasbih);
 
-  // Persist whenever tasbih changes
+  // Persist whenever tasbih changes (skip if student not yet loaded)
   useEffect(() => {
+    console.log('[TasbihTab] saveTasbih firing', { studentId: student?.id, todayCount: tasbih?.todayCount });
+    if (!student?.id) return;
     saveTasbih(student, tasbih);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasbih]);
