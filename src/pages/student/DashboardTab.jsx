@@ -126,7 +126,10 @@ export default function DashboardTab({ challenge, memberStudents }) {
     else if (todayStr > period.endDate) periodDateStatus = 'ended';
     else periodDateStatus = 'active';
   }
-  const canSubmit = !period || periodDateStatus === 'active';
+
+  // Block yesterday if the submitted date falls before the period's start date
+  const yesterdayBeforePeriod = dayMode === 'yesterday' && !!period?.startDate && dateStr < period.startDate;
+  const canSubmit = !period || (periodDateStatus === 'active' && !yesterdayBeforePeriod);
 
   // Label for first stat card
   const totalLabel = isChallenge ? 'Challenge Pts' : 'Total Points';
@@ -251,6 +254,9 @@ export default function DashboardTab({ challenge, memberStudents }) {
                   <p className="text-xs text-muted mb-2">
                     Period starts on {formatDate(period.startDate)}.
                   </p>
+                )}
+                {yesterdayBeforePeriod && (
+                  <p className="text-xs text-muted mb-2">Yesterday is before this challenge started.</p>
                 )}
                 {err && <p className="text-xs text-danger mb-2">{err}</p>}
                 <Button full onClick={handleSubmit} disabled={!checkedCount || !canSubmit}>

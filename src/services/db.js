@@ -659,6 +659,9 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     if (activePeriod.endDate && today > activePeriod.endDate) {
       throw new Error('This period has already ended. Submissions are closed.');
     }
+    if (activePeriod.startDate && dateStr < activePeriod.startDate) {
+      throw new Error('Yesterday is before this challenge started.');
+    }
   }
 
   // Upsert with ignoreDuplicates prevents the race condition where two devices

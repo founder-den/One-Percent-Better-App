@@ -62,8 +62,13 @@ function bonusBetween(student, start, end) {
 }
 
 // ─── Grand total: sum stored submission.points + bonus points ─────────
-export function getStudentGrandTotal(student, submissions) {
-  const subPts = (submissions || []).reduce((sum, sub) => {
+// validPeriodIds (optional Set): when provided, only count submissions whose
+// periodId is null or belongs to a still-existing period (filters deleted challenge points).
+export function getStudentGrandTotal(student, submissions, validPeriodIds) {
+  const filtered = validPeriodIds
+    ? (submissions || []).filter(sub => !sub.periodId || validPeriodIds.has(sub.periodId))
+    : (submissions || []);
+  const subPts = filtered.reduce((sum, sub) => {
     return sum + (typeof sub.points === 'number' ? sub.points : 0);
   }, 0);
   const bonusPts = (student.bonusPoints || []).reduce((sum, b) => sum + Number(b.points || 0), 0);
