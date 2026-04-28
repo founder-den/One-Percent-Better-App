@@ -106,13 +106,27 @@ export default function DashboardTab({ challenge, memberStudents }) {
     setErr('');
     const ids = activities.filter(a => checked[a.id]).map(a => a.id);
     if (!ids.length) { setErr('Check at least one activity.'); return; }
-    const ok = await submitDay(student.id, dateStr, ids, quote.trim(), challenge?.id || null);
-    if (!ok) { setErr('Failed to submit. Please try again.'); return; }
+    try {
+      const ok = await submitDay(student.id, dateStr, ids, quote.trim(), challenge?.id || null);
+      if (!ok) { setErr('Failed to submit. Please try again.'); return; }
+    } catch (e) {
+      setErr(e.message || 'Failed to submit. Please try again.');
+      return;
+    }
     setChecked({});
     setQuote('');
   }
 
   const checkedCount = activities.filter(a => checked[a.id]).length;
+
+  // Period date-boundary status — independent of is_active flag
+  let periodDateStatus = null; // 'not_started' | 'active' | 'ended'
+  if (period && period.startDate && period.endDate) {
+    if (todayStr < period.startDate) periodDateStatus = 'not_started';
+    else if (todayStr > period.endDate) periodDateStatus = 'ended';
+    else periodDateStatus = 'active';
+  }
+  const canSubmit = !period || periodDateStatus === 'active';
 
   // Label for first stat card
   const totalLabel = isChallenge ? 'Challenge Pts' : 'Total Points';
@@ -230,8 +244,16 @@ export default function DashboardTab({ challenge, memberStudents }) {
                   rows={2}
                 />
                 <p className="text-xs text-muted -mt-3 mb-3">{quote.length}/200</p>
+                {periodDateStatus === 'ended' && (
+                  <p className="text-xs text-danger mb-2">Submission period ended.</p>
+                )}
+                {periodDateStatus === 'not_started' && (
+                  <p className="text-xs text-muted mb-2">
+                    Period starts on {formatDate(period.startDate)}.
+                  </p>
+                )}
                 {err && <p className="text-xs text-danger mb-2">{err}</p>}
-                <Button full onClick={handleSubmit} disabled={!checkedCount}>
+                <Button full onClick={handleSubmit} disabled={!checkedCount || !canSubmit}>
                   Submit ({checkedCount} {checkedCount === 1 ? 'activity' : 'activities'})
                 </Button>
               </>

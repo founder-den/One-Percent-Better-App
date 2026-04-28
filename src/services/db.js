@@ -647,8 +647,20 @@ export async function dbDeleteStudent(id) {
 }
 
 // ─── SUBMISSIONS ──────────────────────────────────────────────────
-export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points, periodId) {
+export async function dbSubmitDay(studentId, dateStr, completedActivities, quote, points, periodId, activePeriod = null) {
   console.log('[db] submitDay:', studentId, dateStr);
+
+  // Enforce period date boundaries (skipped for admin submissions that pass null)
+  if (activePeriod) {
+    const today = new Date().toISOString().split('T')[0];
+    if (activePeriod.startDate && today < activePeriod.startDate) {
+      throw new Error('This period has not started yet');
+    }
+    if (activePeriod.endDate && today > activePeriod.endDate) {
+      throw new Error('This period has already ended. Submissions are closed.');
+    }
+  }
+
   // Upsert with ignoreDuplicates prevents the race condition where two devices
   // submit simultaneously — the DB unique constraint does the dedup atomically.
   // Requires: UNIQUE (student_id, date, period_id) on submissions table.
@@ -1056,6 +1068,27 @@ export async function dbUpdateChallenge(id, fields) {
 
 export async function dbDeleteChallenge(id) {
   console.log('[db] deleteChallenge:', id);
+
+  // 1. Fetch challenge to collect its embedded period IDs
+  const { data: challenge, error: fetchError } = await supabase
+    .from('challenges').select('periods').eq('id', id).maybeSingle();
+  if (fetchError) { console.error('[db] deleteChallenge — fetch FAILED:', fetchError); return false; }
+
+  const periodIds = (challenge?.periods || []).map(p => p.id).filter(Boolean);
+
+  // 2. Delete submissions that belong to any of this challenge's periods
+  if (periodIds.length > 0) {
+    const { error: subError } = await supabase
+      .from('submissions').delete().in('period_id', periodIds);
+    if (subError) { console.error('[db] deleteChallenge — submissions delete FAILED:', subError); return false; }
+  }
+
+  // 3. Delete challenge memberships
+  const { error: memError } = await supabase
+    .from('challenge_memberships').delete().eq('challenge_id', id);
+  if (memError) { console.error('[db] deleteChallenge — memberships delete FAILED:', memError); return false; }
+
+  // 4. Delete the challenge itself
   const { error } = await supabase.from('challenges').delete().eq('id', id);
   if (error) { console.error('[db] deleteChallenge — Supabase write FAILED:', error); return false; }
   return true;

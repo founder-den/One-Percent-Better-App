@@ -362,7 +362,13 @@ export function AppProvider({ children }) {
       completedCount: (completedActivities || []).length,
     });
 
-    const ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points, activePd?.id || null);
+    let ok;
+    try {
+      ok = await dbSubmitDay(studentId, dateStr, completedActivities, quote || '', points, activePd?.id || null, activePd);
+    } catch (err) {
+      console.error('[AppContext] submitDay blocked by date check:', err.message);
+      throw err; // re-throw so DashboardTab can surface the exact message
+    }
     if (!ok) { console.error('[AppContext] submitDay failed — state NOT updated'); return null; }
     const sub = {
       date: dateStr, completedActivities, points, periodId: activePd?.id || null, quote: quote || '', quoteLikes: [],
@@ -779,11 +785,24 @@ export function AppProvider({ children }) {
 
   const deleteChallenge = useCallback(async (id) => {
     console.log('[AppContext] deleteChallenge:', id);
+    const challenge = challenges.find(c => c.id === id);
+    const challengePeriodIds = new Set((challenge?.periods || []).map(p => p.id));
+
     const ok = await dbDeleteChallenge(id);
     if (!ok) { console.error('[AppContext] deleteChallenge failed — state NOT updated'); return; }
+
     setChallenges(c => c.filter(ch => ch.id !== id));
     setChallengeMemberships(m => m.filter(m => m.challengeId !== id));
-  }, []);
+
+    // Remove submissions that belonged to this challenge's periods so points
+    // recalculate immediately without a page refresh.
+    if (challengePeriodIds.size > 0) {
+      setStudents(s => s.map(st => ({
+        ...st,
+        submissions: (st.submissions || []).filter(sub => !challengePeriodIds.has(sub.periodId)),
+      })));
+    }
+  }, [challenges]);
 
   const joinChallenge = useCallback(async (challengeId, studentId) => {
     console.log('[AppContext] joinChallenge:', challengeId, studentId);
