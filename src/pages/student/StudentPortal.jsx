@@ -96,7 +96,7 @@ function LoginForm({ onShowRegister }) {
 function RegisterForm({ onShowLogin }) {
   const { loginStudentDirectly }      = useAuth();
   const { students, findGroupByCode, registerStudent, registrationMode } = useApp();
-  const [form, setForm]               = useState({ fullName: '', username: '', password: '', code: '' });
+  const [form, setForm]               = useState({ fullName: '', username: '', password: '', phone: '', code: '' });
   const [errors, setErrors]           = useState({});
   const [usernameHint, setUsernameHint] = useState('');
   const [codeHint, setCodeHint]       = useState('');
@@ -124,6 +124,7 @@ function RegisterForm({ onShowLogin }) {
     if (!form.fullName.trim()) errs.fullName = 'Required';
     if (!form.username.trim() || form.username.length < 3) errs.username = 'Min 3 characters';
     if (form.password.length < 4) errs.password = 'Min 4 characters';
+    if (!form.phone.trim()) errs.phone = 'Phone number is required';
     if (!form.code.trim()) errs.code = 'Required';
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
@@ -139,7 +140,7 @@ function RegisterForm({ onShowLogin }) {
     const status = registrationMode === 'approval' ? 'pending' : 'active';
     try {
       const newStudent = await registerStudent(
-        { fullName: form.fullName, username: form.username, password: form.password },
+        { fullName: form.fullName, username: form.username, password: form.password, phone: form.phone },
         grp.id,
         status
       );
@@ -197,6 +198,15 @@ function RegisterForm({ onShowLogin }) {
             error={errors.password}
             placeholder="Min 4 characters"
             autoComplete="new-password"
+          />
+          <Input
+            label="Phone Number"
+            type="tel"
+            value={form.phone}
+            onChange={set('phone')}
+            error={errors.phone}
+            placeholder="+1 (555) 000-0000"
+            autoComplete="tel"
           />
           <div>
             <Input

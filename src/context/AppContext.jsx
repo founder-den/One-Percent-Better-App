@@ -281,7 +281,7 @@ export function AppProvider({ children }) {
       secondaryGroupIds: [],
       status,
       university: '',
-      phone: '',
+      phone: fields.phone || '',
       avatar: null,
       tasbih: { allTimeTotal: 0, todayCount: 0, lastUpdatedDate: '', dailyResetEnabled: false },
       personalTasbihProgress: {},

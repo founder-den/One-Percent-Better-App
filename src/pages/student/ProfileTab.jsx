@@ -46,7 +46,7 @@ function AvatarUpload({ avatar, name, onChange }) {
 
 // ─── Main ─────────────────────────────────────────────────────────
 export default function ProfileTab() {
-  const { student } = useAuth();
+  const { student, logoutStudent } = useAuth();
   const { updateStudent } = useApp();
 
   // Edit form state
@@ -253,6 +253,26 @@ export default function ProfileTab() {
           <Button type="submit" full variant="outline">Change Password</Button>
         </form>
       </Card>
+
+      {/* ── Logout ───────────────────────────────────────────── */}
+      <div style={{ padding: '4px 0', marginTop: '8px' }}>
+        <button
+          onClick={logoutStudent}
+          style={{
+            width: '100%',
+            padding: '14px',
+            backgroundColor: '#dc2626',
+            color: 'white',
+            border: 'none',
+            borderRadius: '10px',
+            fontSize: '16px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}
+        >
+          Log Out
+        </button>
+      </div>
 
     </div>
   );
