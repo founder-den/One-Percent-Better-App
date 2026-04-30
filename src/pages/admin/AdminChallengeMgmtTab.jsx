@@ -242,7 +242,10 @@ export default function AdminChallengeMgmtTab() {
       ) : (
         <div className="space-y-3">
           {challenges.map(c => {
-            const memberCount = challengeMemberships.filter(m => m.challengeId === c.id).length;
+            const memberCount = challengeMemberships
+              .filter(m => m.challengeId === c.id)
+              .filter(m => students.some(s => s.id === m.studentId))
+              .length;
             return (
               <div key={c.id} className="bg-bg-card border border-border rounded-card p-4">
                 <div className="flex items-start justify-between gap-3">

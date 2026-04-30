@@ -641,6 +641,8 @@ export async function dbUpdateStudent(id, fields) {
 
 export async function dbDeleteStudent(id) {
   console.log('[db] deleteStudent:', id);
+  const { error: memErr } = await supabase.from('challenge_memberships').delete().eq('student_id', id);
+  if (memErr) { console.error('[db] deleteStudent — failed to delete memberships:', memErr); return false; }
   const { error } = await supabase.from('students').delete().eq('id', id);
   if (error) { console.error('[db] deleteStudent — Supabase write FAILED:', error); return false; }
   return true;

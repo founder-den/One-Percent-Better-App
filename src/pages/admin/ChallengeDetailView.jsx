@@ -400,7 +400,7 @@ function ChallengeDataTab({ challenge, students, memberships }) {
   );
 
   const submittedIds   = new Set(allSubs.map(s => s.studentId));
-  const totalMembers   = memberIds.length;
+  const totalMembers   = memberStudents.length;
   const submittedCount = submittedIds.size;
   const submissionPct  = totalMembers > 0 ? (submittedCount / totalMembers) * 100 : 0;
 
