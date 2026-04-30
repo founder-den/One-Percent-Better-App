@@ -677,8 +677,9 @@ export default function HomeTab({ onEditProfile }) {
     announcements, activities, students, periods,
   } = useApp();
 
-  const [dismissed,    setDismissed]   = useState(() => getDismissed());
-  const [modalStudent, setModalStudent] = useState(null);
+  const [dismissed,       setDismissed]      = useState(() => getDismissed());
+  const [modalStudent,    setModalStudent]   = useState(null);
+  const [fullScreenImage, setFullScreenImage] = useState(null);
 
   const group = findGroupById(student.groupId);
 
@@ -903,27 +904,54 @@ export default function HomeTab({ onEditProfile }) {
 
       {/* ── Section 6: Announcements ─────────────────────────────── */}
       {adminAnnouncements.length > 0 && (
-        <div className="space-y-2">
-          {adminAnnouncements.map(ann => (
-            <div
-              key={ann.id}
-              className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
-              style={{ borderLeft: '3px solid var(--gold)' }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-primary">{ann.title}</p>
-                {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
-                {ann.url && (
-                  <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
-                    <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
-                  </a>
-                )}
+        <div>
+          <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#999', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            ANNOUNCEMENTS
+          </h3>
+          <div className="space-y-2">
+            {adminAnnouncements.map(ann => (
+              <div
+                key={ann.id}
+                className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
+                style={{ borderLeft: '3px solid var(--gold)' }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-primary">{ann.title}</p>
+                  {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
+                  {ann.url && (
+                    <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
+                      <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
+                    </a>
+                  )}
+                  {ann.attachmentUrl && ann.attachmentType === 'image' && (
+                    <img
+                      src={ann.attachmentUrl}
+                      alt="attachment"
+                      style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', marginTop: '8px' }}
+                      onClick={() => setFullScreenImage(ann.attachmentUrl)}
+                    />
+                  )}
+                  {ann.attachmentUrl && ann.attachmentType === 'pdf' && (
+                    <a href={ann.attachmentUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '8px' }}>
+                      <div style={{ width: '80px', height: '60px', backgroundColor: '#fee2e2', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px', color: '#dc2626' }}>
+                        📄 PDF
+                      </div>
+                    </a>
+                  )}
+                </div>
+                <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
+                  ✕
+                </button>
               </div>
-              <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
-                ✕
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fullScreenImage && (
+        <div onClick={() => setFullScreenImage(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, cursor: 'pointer' }}>
+          <img src={fullScreenImage} alt="full size" style={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain' }} />
+          <span style={{ position: 'absolute', top: 20, right: 20, color: 'white', fontSize: '30px' }}>✕</span>
         </div>
       )}
 

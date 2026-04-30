@@ -170,6 +170,8 @@ function mapAnnouncement(row) {
     isPinned:        row.is_pinned        ?? false,
     isActive:        row.is_active        ?? true,
     createdAt:       row.created_at       || '',
+    attachmentUrl:   row.attachment_url   || '',
+    attachmentType:  row.attachment_type  || '',
   };
 }
 
@@ -1177,6 +1179,8 @@ export async function dbAddAnnouncement(ann) {
     visible_to_groups: ann.visibleToGroups || [],
     is_pinned:        ann.isPinned         ?? false,
     is_active:        ann.isActive         ?? true,
+    attachment_url:   ann.attachmentUrl    || '',
+    attachment_type:  ann.attachmentType   || '',
   });
   if (error) { console.error('[db] addAnnouncement — Supabase write FAILED:', error); return null; }
   return ann;
@@ -1192,6 +1196,8 @@ export async function dbUpdateAnnouncement(id, fields) {
   if (fields.visibleToGroups  !== undefined) row.visible_to_groups = fields.visibleToGroups;
   if (fields.isPinned         !== undefined) row.is_pinned         = fields.isPinned;
   if (fields.isActive         !== undefined) row.is_active         = fields.isActive;
+  if (fields.attachmentUrl    !== undefined) row.attachment_url    = fields.attachmentUrl;
+  if (fields.attachmentType   !== undefined) row.attachment_type   = fields.attachmentType;
 
   const { error } = await supabase.from('announcements').update(row).eq('id', id);
   if (error) { console.error('[db] updateAnnouncement — Supabase write FAILED:', error); return false; }
@@ -1203,6 +1209,19 @@ export async function dbDeleteAnnouncement(id) {
   const { error } = await supabase.from('announcements').delete().eq('id', id);
   if (error) { console.error('[db] deleteAnnouncement — Supabase write FAILED:', error); return false; }
   return true;
+}
+
+export async function dbUploadAnnouncementFile(file) {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `announcement_${Date.now()}.${fileExt}`;
+  const { error } = await supabase.storage
+    .from('announcements')
+    .upload(fileName, file, { upsert: true });
+  if (error) throw error;
+  const { data: urlData } = supabase.storage
+    .from('announcements')
+    .getPublicUrl(fileName);
+  return urlData.publicUrl;
 }
 
 // ─── Realtime subscriptions ───────────────────────────────────────

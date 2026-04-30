@@ -874,6 +874,8 @@ export function AppProvider({ children }) {
       isPinned:        fields.isPinned        ?? false,
       isActive:        fields.isActive        ?? true,
       createdAt:       new Date().toISOString(),
+      attachmentUrl:   fields.attachmentUrl   || '',
+      attachmentType:  fields.attachmentType  || '',
     };
     const confirmed = await dbAddAnnouncement(newA);
     if (!confirmed) { console.error('[AppContext] addAnnouncement failed — state NOT updated'); return null; }

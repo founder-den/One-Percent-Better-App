@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useApp } from '../../context/AppContext.jsx';
+import { dbUploadAnnouncementFile } from '../../services/db.js';
 import {
   Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge,
 } from '../../components/ui.jsx';
 
-const BLANK = { title: '', message: '', url: '', showOn: 'dashboard', isPinned: false, isActive: true };
+const BLANK = { title: '', message: '', url: '', showOn: 'dashboard', isPinned: false, isActive: true, attachmentUrl: '', attachmentType: '' };
 
 const SHOW_ON_OPTIONS = [
   { value: 'dashboard', label: 'Dashboard' },
@@ -21,6 +22,7 @@ export default function AnnouncementsAdminTab() {
   const [scopeMode, setScopeMode] = useState('all');
   const [selGroups, setSelGroups] = useState([]);
   const [err,       setErr]       = useState('');
+  const [uploading, setUploading] = useState(false);
 
   function openCreate() {
     setForm(BLANK);
@@ -33,7 +35,7 @@ export default function AnnouncementsAdminTab() {
 
   function openEdit(ann) {
     const isAll = !ann.visibleToGroups || ann.visibleToGroups.length === 0;
-    setForm({ title: ann.title, message: ann.message || '', url: ann.url || '', showOn: ann.showOn || 'dashboard', isPinned: ann.isPinned ?? false, isActive: ann.isActive ?? true });
+    setForm({ title: ann.title, message: ann.message || '', url: ann.url || '', showOn: ann.showOn || 'dashboard', isPinned: ann.isPinned ?? false, isActive: ann.isActive ?? true, attachmentUrl: ann.attachmentUrl || '', attachmentType: ann.attachmentType || '' });
     setScopeMode(isAll ? 'all' : 'specific');
     setSelGroups(isAll ? [] : ann.visibleToGroups);
     setEditId(ann.id);
@@ -46,7 +48,7 @@ export default function AnnouncementsAdminTab() {
     if (!form.title.trim()) { setErr('Title is required.'); return; }
     if (scopeMode === 'specific' && selGroups.length === 0) { setErr('Select at least one group.'); return; }
     const visibleToGroups = scopeMode === 'all' ? [] : selGroups;
-    const fields = { title: form.title.trim(), message: form.message.trim(), url: form.url.trim(), showOn: form.showOn, visibleToGroups, isPinned: form.isPinned, isActive: form.isActive };
+    const fields = { title: form.title.trim(), message: form.message.trim(), url: form.url.trim(), showOn: form.showOn, visibleToGroups, isPinned: form.isPinned, isActive: form.isActive, attachmentUrl: form.attachmentUrl, attachmentType: form.attachmentType };
     if (editId) {
       updateAnnouncement(editId, fields);
     } else {
@@ -139,6 +141,44 @@ export default function AnnouncementsAdminTab() {
           onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
           placeholder="https://…"
         />
+
+        {/* Attachment */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Attachment (Image or PDF)</label>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/gif,application/pdf"
+            disabled={uploading}
+            onChange={async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              setUploading(true);
+              try {
+                const url = await dbUploadAnnouncementFile(file);
+                const type = file.type.includes('pdf') ? 'pdf' : 'image';
+                setForm(f => ({ ...f, attachmentUrl: url, attachmentType: type }));
+              } catch (err) {
+                setErr('File upload failed. Check Supabase storage bucket.');
+              } finally {
+                setUploading(false);
+              }
+            }}
+            className="block w-full text-sm text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-gold file:text-bg hover:file:bg-gold-l"
+          />
+          {uploading && <p className="text-xs text-muted mt-1">Uploading…</p>}
+          {form.attachmentUrl && !uploading && (
+            <p className="text-xs text-green-400 mt-1">File uploaded ✓</p>
+          )}
+          {form.attachmentUrl && (
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, attachmentUrl: '', attachmentType: '' }))}
+              className="text-xs text-danger mt-1 hover:underline"
+            >
+              Remove attachment
+            </button>
+          )}
+        </div>
 
         {/* Show On */}
         <div className="mb-4">

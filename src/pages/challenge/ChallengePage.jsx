@@ -117,6 +117,7 @@ function ChallengeList({ student, challenges, challengeMemberships, onSelect, jo
   const [codeErr, setCodeErr] = useState('');
   const [joining, setJoining] = useState(false);
   const [dismissed, setDismissed] = useState(() => getDismissed());
+  const [fullScreenImage, setFullScreenImage] = useState(null);
 
   const challengeAnnouncements = announcements
     .filter(a =>
@@ -170,32 +171,6 @@ function ChallengeList({ student, challenges, challengeMemberships, onSelect, jo
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-8">
 
-      {/* ── Announcements ── */}
-      {challengeAnnouncements.length > 0 && (
-        <div className="space-y-2">
-          {challengeAnnouncements.map(ann => (
-            <div
-              key={ann.id}
-              className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
-              style={{ borderLeft: '3px solid var(--gold)' }}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-primary">{ann.title}</p>
-                {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
-                {ann.url && (
-                  <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
-                    <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
-                  </a>
-                )}
-              </div>
-              <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* ── Join by code ── */}
       <div className="bg-bg-card border border-border rounded-card p-5">
         <h2 className="font-semibold text-primary mb-3">Join a Challenge</h2>
@@ -247,6 +222,59 @@ function ChallengeList({ student, challenges, challengeMemberships, onSelect, jo
           </div>
         )}
       </div>
+
+      {/* ── Announcements ── */}
+      {challengeAnnouncements.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: '12px', fontWeight: '600', color: '#999', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            ANNOUNCEMENTS
+          </h3>
+          <div className="space-y-2">
+            {challengeAnnouncements.map(ann => (
+              <div
+                key={ann.id}
+                className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
+                style={{ borderLeft: '3px solid var(--gold)' }}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-primary">{ann.title}</p>
+                  {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
+                  {ann.url && (
+                    <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
+                      <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
+                    </a>
+                  )}
+                  {ann.attachmentUrl && ann.attachmentType === 'image' && (
+                    <img
+                      src={ann.attachmentUrl}
+                      alt="attachment"
+                      style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', marginTop: '8px' }}
+                      onClick={() => setFullScreenImage(ann.attachmentUrl)}
+                    />
+                  )}
+                  {ann.attachmentUrl && ann.attachmentType === 'pdf' && (
+                    <a href={ann.attachmentUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '8px' }}>
+                      <div style={{ width: '80px', height: '60px', backgroundColor: '#fee2e2', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px', color: '#dc2626' }}>
+                        📄 PDF
+                      </div>
+                    </a>
+                  )}
+                </div>
+                <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fullScreenImage && (
+        <div onClick={() => setFullScreenImage(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, cursor: 'pointer' }}>
+          <img src={fullScreenImage} alt="full size" style={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain' }} />
+          <span style={{ position: 'absolute', top: 20, right: 20, color: 'white', fontSize: '30px' }}>✕</span>
+        </div>
+      )}
 
       {/* ── Open Challenges ── */}
       {openChallenges.length > 0 && (
