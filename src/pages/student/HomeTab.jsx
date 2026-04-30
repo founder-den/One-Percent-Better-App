@@ -649,16 +649,6 @@ function ChallengeAnnouncementRow({ challenge, studentId, joinChallenge }) {
   );
 }
 
-// ─── localStorage helpers for dismissed announcements ─────────────
-const DISMISSED_KEY = 'dismissed_announcements';
-function getDismissed() {
-  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); } catch { return []; }
-}
-function saveDismissed(id) {
-  const prev = getDismissed();
-  if (!prev.includes(id)) localStorage.setItem(DISMISSED_KEY, JSON.stringify([...prev, id]));
-}
-
 function daysRemaining(endDateStr) {
   if (!endDateStr) return null;
   const [y, m, d] = endDateStr.split('-').map(Number);
@@ -677,7 +667,6 @@ export default function HomeTab({ onEditProfile }) {
     announcements, activities, students, periods,
   } = useApp();
 
-  const [dismissed,       setDismissed]      = useState(() => getDismissed());
   const [modalStudent,    setModalStudent]   = useState(null);
   const [fullScreenImage, setFullScreenImage] = useState(null);
 
@@ -758,8 +747,7 @@ export default function HomeTab({ onEditProfile }) {
     .filter(a =>
       a.isActive &&
       (a.showOn === 'dashboard' || a.showOn === 'both' || !a.showOn) &&
-      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId)) &&
-      !dismissed.includes(a.id)
+      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId))
     )
     .sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
@@ -772,11 +760,6 @@ export default function HomeTab({ onEditProfile }) {
     () => [...groupStudents].sort((a, b) => getStudentGrandTotal(b, b.submissions || [], validPeriodIds) - getStudentGrandTotal(a, a.submissions || [], validPeriodIds)),
     [groupStudents, validPeriodIds]
   );
-
-  function handleDismiss(id) {
-    saveDismissed(id);
-    setDismissed(prev => [...prev, id]);
-  }
 
   // ── Render ───────────────────────────────────────────────────────
   return (
@@ -939,9 +922,6 @@ export default function HomeTab({ onEditProfile }) {
                     </a>
                   )}
                 </div>
-                <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
-                  ✕
-                </button>
               </div>
             ))}
           </div>

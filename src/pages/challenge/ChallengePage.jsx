@@ -100,42 +100,25 @@ function ChallengeDetail({ challenge, onBack }) {
   );
 }
 
-// ─── localStorage helpers for dismissed announcements ────────────
-const DISMISSED_KEY = 'dismissed_announcements';
-function getDismissed() {
-  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); } catch { return []; }
-}
-function saveDismissed(id) {
-  const prev = getDismissed();
-  if (!prev.includes(id)) localStorage.setItem(DISMISSED_KEY, JSON.stringify([...prev, id]));
-}
-
 // ─── Challenge list (main view) ────────────────────────────────────
 function ChallengeList({ student, challenges, challengeMemberships, onSelect, joinChallenge }) {
   const { announcements } = useApp();
   const [code, setCode]       = useState('');
   const [codeErr, setCodeErr] = useState('');
   const [joining, setJoining] = useState(false);
-  const [dismissed, setDismissed] = useState(() => getDismissed());
   const [fullScreenImage, setFullScreenImage] = useState(null);
 
   const challengeAnnouncements = announcements
     .filter(a =>
       a.isActive &&
       (a.showOn === 'challenge' || a.showOn === 'both') &&
-      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId)) &&
-      !dismissed.includes(a.id)
+      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId))
     )
     .sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
-
-  function handleDismiss(id) {
-    saveDismissed(id);
-    setDismissed(prev => [...prev, id]);
-  }
 
   const myMembershipIds = challengeMemberships
     .filter(m => m.studentId === student.id)
@@ -260,9 +243,6 @@ function ChallengeList({ student, challenges, challengeMemberships, onSelect, jo
                     </a>
                   )}
                 </div>
-                <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
-                  ✕
-                </button>
               </div>
             ))}
           </div>
