@@ -274,6 +274,18 @@ ALTER TABLE challenges ADD COLUMN IF NOT EXISTS periods jsonb DEFAULT '[]';
 ALTER TABLE submissions ADD COLUMN IF NOT EXISTS score_override numeric DEFAULT NULL;
 
 
+-- ─── Announcements: url + show_on columns ────────────────────────────────────
+-- Run in Supabase SQL Editor:
+ALTER TABLE public.announcements
+ADD COLUMN IF NOT EXISTS url text DEFAULT '';
+
+ALTER TABLE public.announcements
+ADD COLUMN IF NOT EXISTS show_on text DEFAULT 'dashboard';
+
+ALTER TABLE public.announcements
+ADD COLUMN IF NOT EXISTS title text DEFAULT '';
+
+
 -- ─── Migrate existing students → Ramadan Challenge ────────────────────
 -- Run this in Supabase SQL Editor to add all existing students as members
 -- of the Ramadan Challenge automatically:

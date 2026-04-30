@@ -164,6 +164,8 @@ function mapAnnouncement(row) {
     id:              row.id,
     title:           row.title,
     message:         row.message          || '',
+    url:             row.url              || '',
+    showOn:          row.show_on          || 'dashboard',
     visibleToGroups: row.visible_to_groups || [],
     isPinned:        row.is_pinned        ?? false,
     isActive:        row.is_active        ?? true,
@@ -1170,6 +1172,8 @@ export async function dbAddAnnouncement(ann) {
     id:               ann.id,
     title:            ann.title,
     message:          ann.message          || '',
+    url:              ann.url              || '',
+    show_on:          ann.showOn           || 'dashboard',
     visible_to_groups: ann.visibleToGroups || [],
     is_pinned:        ann.isPinned         ?? false,
     is_active:        ann.isActive         ?? true,
@@ -1183,6 +1187,8 @@ export async function dbUpdateAnnouncement(id, fields) {
   const row = {};
   if (fields.title            !== undefined) row.title             = fields.title;
   if (fields.message          !== undefined) row.message           = fields.message;
+  if (fields.url              !== undefined) row.url               = fields.url;
+  if (fields.showOn           !== undefined) row.show_on           = fields.showOn;
   if (fields.visibleToGroups  !== undefined) row.visible_to_groups = fields.visibleToGroups;
   if (fields.isPinned         !== undefined) row.is_pinned         = fields.isPinned;
   if (fields.isActive         !== undefined) row.is_active         = fields.isActive;

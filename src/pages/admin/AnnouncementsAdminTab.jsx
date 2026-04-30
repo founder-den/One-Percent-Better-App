@@ -4,7 +4,13 @@ import {
   Card, Button, Input, Textarea, SectionHeading, EmptyState, Alert, Modal, Badge,
 } from '../../components/ui.jsx';
 
-const BLANK = { title: '', message: '', isPinned: false, isActive: true };
+const BLANK = { title: '', message: '', url: '', showOn: 'dashboard', isPinned: false, isActive: true };
+
+const SHOW_ON_OPTIONS = [
+  { value: 'dashboard', label: 'Dashboard' },
+  { value: 'challenge', label: 'Challenge' },
+  { value: 'both',      label: 'Both' },
+];
 
 export default function AnnouncementsAdminTab() {
   const { groups, announcements, addAnnouncement, updateAnnouncement, deleteAnnouncement } = useApp();
@@ -27,7 +33,7 @@ export default function AnnouncementsAdminTab() {
 
   function openEdit(ann) {
     const isAll = !ann.visibleToGroups || ann.visibleToGroups.length === 0;
-    setForm({ title: ann.title, message: ann.message || '', isPinned: ann.isPinned ?? false, isActive: ann.isActive ?? true });
+    setForm({ title: ann.title, message: ann.message || '', url: ann.url || '', showOn: ann.showOn || 'dashboard', isPinned: ann.isPinned ?? false, isActive: ann.isActive ?? true });
     setScopeMode(isAll ? 'all' : 'specific');
     setSelGroups(isAll ? [] : ann.visibleToGroups);
     setEditId(ann.id);
@@ -40,7 +46,7 @@ export default function AnnouncementsAdminTab() {
     if (!form.title.trim()) { setErr('Title is required.'); return; }
     if (scopeMode === 'specific' && selGroups.length === 0) { setErr('Select at least one group.'); return; }
     const visibleToGroups = scopeMode === 'all' ? [] : selGroups;
-    const fields = { title: form.title.trim(), message: form.message.trim(), visibleToGroups, isPinned: form.isPinned, isActive: form.isActive };
+    const fields = { title: form.title.trim(), message: form.message.trim(), url: form.url.trim(), showOn: form.showOn, visibleToGroups, isPinned: form.isPinned, isActive: form.isActive };
     if (editId) {
       updateAnnouncement(editId, fields);
     } else {
@@ -85,7 +91,8 @@ export default function AnnouncementsAdminTab() {
                 {ann.isActive  ? <Badge variant="gold">Active</Badge> : <Badge variant="muted">Inactive</Badge>}
               </div>
               {ann.message && <p className="text-xs text-muted whitespace-pre-wrap mb-1">{ann.message}</p>}
-              <p className="text-xs text-muted">Visible to: {scopeLabel(ann)}</p>
+              {ann.url && <p className="text-xs text-muted truncate mb-1">🔗 {ann.url}</p>}
+              <p className="text-xs text-muted">Visible to: {scopeLabel(ann)} · Shows on: {ann.showOn || 'dashboard'}</p>
             </div>
             <div className="flex flex-col gap-1 items-end flex-shrink-0">
               <Button size="xs" variant="ghost" onClick={() => openEdit(ann)}>Edit</Button>
@@ -126,6 +133,25 @@ export default function AnnouncementsAdminTab() {
           placeholder="Announcement details…"
           rows={3}
         />
+        <Input
+          label="URL (optional)"
+          value={form.url}
+          onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+          placeholder="https://…"
+        />
+
+        {/* Show On */}
+        <div className="mb-4">
+          <label className="block text-xs font-medium text-muted mb-1.5 uppercase tracking-wide">Show On</label>
+          <div className="flex gap-4">
+            {SHOW_ON_OPTIONS.map(opt => (
+              <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm text-primary">
+                <input type="radio" checked={form.showOn === opt.value} onChange={() => setForm(f => ({ ...f, showOn: opt.value }))} className="accent-gold" />
+                {opt.label}
+              </label>
+            ))}
+          </div>
+        </div>
 
         {/* Visible to groups */}
         <div className="mb-4">

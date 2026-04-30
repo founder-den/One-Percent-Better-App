@@ -868,6 +868,8 @@ export function AppProvider({ children }) {
       id:              `ann_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
       title:           fields.title           || '',
       message:         fields.message         || '',
+      url:             fields.url             || '',
+      showOn:          fields.showOn          || 'dashboard',
       visibleToGroups: fields.visibleToGroups || [],
       isPinned:        fields.isPinned        ?? false,
       isActive:        fields.isActive        ?? true,

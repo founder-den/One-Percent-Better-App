@@ -100,11 +100,41 @@ function ChallengeDetail({ challenge, onBack }) {
   );
 }
 
+// ─── localStorage helpers for dismissed announcements ────────────
+const DISMISSED_KEY = 'dismissed_announcements';
+function getDismissed() {
+  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); } catch { return []; }
+}
+function saveDismissed(id) {
+  const prev = getDismissed();
+  if (!prev.includes(id)) localStorage.setItem(DISMISSED_KEY, JSON.stringify([...prev, id]));
+}
+
 // ─── Challenge list (main view) ────────────────────────────────────
 function ChallengeList({ student, challenges, challengeMemberships, onSelect, joinChallenge }) {
+  const { announcements } = useApp();
   const [code, setCode]       = useState('');
   const [codeErr, setCodeErr] = useState('');
   const [joining, setJoining] = useState(false);
+  const [dismissed, setDismissed] = useState(() => getDismissed());
+
+  const challengeAnnouncements = announcements
+    .filter(a =>
+      a.isActive &&
+      (a.showOn === 'challenge' || a.showOn === 'both') &&
+      (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId)) &&
+      !dismissed.includes(a.id)
+    )
+    .sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+  function handleDismiss(id) {
+    saveDismissed(id);
+    setDismissed(prev => [...prev, id]);
+  }
 
   const myMembershipIds = challengeMemberships
     .filter(m => m.studentId === student.id)
@@ -139,6 +169,32 @@ function ChallengeList({ student, challenges, challengeMemberships, onSelect, jo
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-8">
+
+      {/* ── Announcements ── */}
+      {challengeAnnouncements.length > 0 && (
+        <div className="space-y-2">
+          {challengeAnnouncements.map(ann => (
+            <div
+              key={ann.id}
+              className="rounded-lg border border-border bg-bg-card px-4 py-3 flex gap-3 items-start"
+              style={{ borderLeft: '3px solid var(--gold)' }}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-primary">{ann.title}</p>
+                {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
+                {ann.url && (
+                  <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
+                    <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
+                  </a>
+                )}
+              </div>
+              <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Join by code ── */}
       <div className="bg-bg-card border border-border rounded-card p-5">

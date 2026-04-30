@@ -756,6 +756,7 @@ export default function HomeTab({ onEditProfile }) {
   const adminAnnouncements = announcements
     .filter(a =>
       a.isActive &&
+      (a.showOn === 'dashboard' || a.showOn === 'both' || !a.showOn) &&
       (a.visibleToGroups.length === 0 || a.visibleToGroups.includes(student.groupId)) &&
       !dismissed.includes(a.id)
     )
@@ -912,6 +913,11 @@ export default function HomeTab({ onEditProfile }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-primary">{ann.title}</p>
                 {ann.message && <p className="text-xs text-muted mt-0.5 whitespace-pre-wrap">{ann.message}</p>}
+                {ann.url && (
+                  <a href={ann.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-1.5">
+                    <button className="px-3 py-1 bg-gold text-bg text-xs font-semibold rounded-lg hover:bg-gold-l transition-colors">Watch Video →</button>
+                  </a>
+                )}
               </div>
               <button onClick={() => handleDismiss(ann.id)} className="text-muted hover:text-primary transition-colors text-xs flex-shrink-0 mt-0.5" aria-label="Dismiss">
                 ✕
