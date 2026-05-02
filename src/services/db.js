@@ -722,8 +722,12 @@ export async function dbEditSubmission(studentId, dateStr, completedActivities, 
     .from('submissions').select('id').eq('student_id', studentId).eq('date', dateStr).maybeSingle();
 
   const updatePayload = { completed_activities: completedActivities };
-  if (typeof scoreOverride === 'number') updatePayload.score_override = scoreOverride;
-  else updatePayload.score_override = null;
+  if (typeof scoreOverride === 'number') {
+    updatePayload.score_override = scoreOverride;
+    updatePayload.points = scoreOverride;
+  } else {
+    updatePayload.score_override = null;
+  }
 
   if (existing) {
     const { error } = await supabase.from('submissions')

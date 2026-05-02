@@ -387,8 +387,12 @@ export function AppProvider({ children }) {
       const subs = (st.submissions || []).map(sub => {
         if (sub.date !== dateStr) return sub;
         const updated = { ...sub, completedActivities };
-        if (typeof scoreOverride === 'number') updated.scoreOverride = scoreOverride;
-        else delete updated.scoreOverride;
+        if (typeof scoreOverride === 'number') {
+          updated.scoreOverride = scoreOverride;
+          updated.points = scoreOverride;
+        } else {
+          delete updated.scoreOverride;
+        }
         return updated;
       });
       const exists = subs.some(sub => sub.date === dateStr);
