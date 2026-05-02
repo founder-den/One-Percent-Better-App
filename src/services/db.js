@@ -260,6 +260,10 @@ export async function loadAll() {
     count: periodsData?.length
   })
 
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 90);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
   const [
     { data: studentRows,      error: e1  },
     { data: submissionRows,   error: e2  },
@@ -280,7 +284,7 @@ export async function loadAll() {
     groups,
   ] = await Promise.all([
     supabase.from('students').select('id, full_name, username, group_id, secondary_group_ids, status, university, phone, avatar, tasbih_count, tasbih, personal_tasbih_progress, personal_tasbihs, telegram_username, preferred_language'),
-    supabase.from('submissions').select('*'),
+    supabase.from('submissions').select('*').gte('date', cutoffStr),
     supabase.from('bonus_points').select('*'),
     supabase.from('books').select('*'),
     supabase.from('program_completions').select('*'),
@@ -1214,6 +1218,18 @@ export async function dbDeleteAnnouncement(id) {
   const { error } = await supabase.from('announcements').delete().eq('id', id);
   if (error) { console.error('[db] deleteAnnouncement — Supabase write FAILED:', error); return false; }
   return true;
+}
+
+export async function dbUploadBanner(mode, dataUrl) {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const path = `banner_${mode}_${Date.now()}.jpg`;
+  const { error } = await supabase.storage
+    .from('banners')
+    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+  if (error) throw error;
+  const { data } = supabase.storage.from('banners').getPublicUrl(path);
+  return data.publicUrl;
 }
 
 // Uploads an avatar File to Supabase Storage and returns its public URL.

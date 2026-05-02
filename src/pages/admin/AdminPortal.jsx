@@ -39,13 +39,26 @@ function getInitialCollapsed() {
 function LoginForm() {
   const { loginAdmin: authLoginAdmin }        = useAuth();
   const { loginAdmin: checkAdminPassword }    = useApp();
-  const [pw,  setPw]  = useState('');
-  const [err, setErr] = useState('');
+  const [pw,        setPw]        = useState('');
+  const [err,       setErr]       = useState('');
+  const [failCount, setFailCount] = useState(0);
+  const [lockUntil, setLockUntil] = useState(0);
 
   function submit(e) {
     e.preventDefault();
-    if (checkAdminPassword(pw)) { authLoginAdmin(); }
-    else { setErr('Incorrect password.'); }
+    if (Date.now() < lockUntil) {
+      setErr(`Too many attempts. Wait ${Math.ceil((lockUntil - Date.now()) / 1000)}s.`);
+      return;
+    }
+    if (checkAdminPassword(pw)) {
+      setFailCount(0);
+      authLoginAdmin();
+    } else {
+      const newCount = failCount + 1;
+      setFailCount(newCount);
+      if (newCount >= 5) setLockUntil(Date.now() + 30_000);
+      setErr('Incorrect password.');
+    }
   }
 
   return (

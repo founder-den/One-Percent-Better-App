@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useApp }  from '../../context/AppContext.jsx';
@@ -40,22 +40,49 @@ function LbRow({ entry, highlight }) {
 // ─── Tab: Current Period ───────────────────────────────────────────
 function PeriodTab({ student, group, groupStudents, activities, periods }) {
   const period = periods.find(p => p.groupId === group.id && !!p.isActive);
+  const [showAll, setShowAll] = useState(false);
+
+  const lb = useMemo(
+    () => period
+      ? buildLeaderboard(groupStudents, activities, 'period', {
+          periodStart: period.startDate,
+          periodEnd:   period.endDate,
+        })
+      : [],
+    [groupStudents, activities, period?.id]
+  );
+
   if (!period) {
     return <EmptyState icon="📅" title="No active period" text="Your admin hasn't started a period yet." />;
   }
-  const lb = buildLeaderboard(groupStudents, activities, 'period', {
-    periodStart: period.startDate,
-    periodEnd:   period.endDate,
-  });
+
+  const visible = showAll ? lb : lb.slice(0, 25);
+  const studentInVisible = visible.some(e => e.id === student.id);
+  const studentEntry = !studentInVisible ? lb.find(e => e.id === student.id) : null;
+
   return (
     <div>
       <p className="text-xs text-muted mb-4">
         {period.name} · {formatDate(period.startDate)} – {formatDate(period.endDate)}
       </p>
       <div className="space-y-2">
-        {lb.map(e => <LbRow key={e.id} entry={e} highlight={e.id === student.id} />)}
+        {visible.map(e => <LbRow key={e.id} entry={e} highlight={e.id === student.id} />)}
+        {studentEntry && (
+          <>
+            <p className="text-xs text-muted text-center py-1">· · ·</p>
+            <LbRow entry={studentEntry} highlight />
+          </>
+        )}
         {lb.length === 0 && <EmptyState icon="🏆" title="No submissions yet" text="Be the first to submit!" />}
       </div>
+      {lb.length > 25 && !showAll && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full mt-3 py-2 text-sm text-muted hover:text-primary border border-dashed border-border rounded-lg transition-colors"
+        >
+          Show all {lb.length} students
+        </button>
+      )}
     </div>
   );
 }

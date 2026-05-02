@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp }  from '../../context/AppContext.jsx';
+import { dbUploadBanner } from '../../services/db.js';
 import {
   Card, Button, Input, SectionHeading, Alert,
   ImageUploadButton, Avatar,
@@ -239,13 +240,24 @@ export default function SettingsTab() {
     setPendingCrop({ mode, src: dataUrl });
   }
 
-  function handleCropSave(croppedDataUrl) {
-    if (pendingCrop.mode === 'dark') {
-      updateCommunity({ bannerDark: croppedDataUrl });
-    } else {
-      updateCommunity({ bannerLight: croppedDataUrl });
-    }
+  async function handleCropSave(croppedDataUrl) {
+    const mode = pendingCrop.mode;
     setPendingCrop(null);
+    // If already a URL (e.g. previously uploaded), use as-is
+    if (croppedDataUrl.startsWith('http')) {
+      if (mode === 'dark') updateCommunity({ bannerDark: croppedDataUrl });
+      else updateCommunity({ bannerLight: croppedDataUrl });
+      return;
+    }
+    try {
+      const url = await dbUploadBanner(mode, croppedDataUrl);
+      if (mode === 'dark') updateCommunity({ bannerDark: url });
+      else updateCommunity({ bannerLight: url });
+    } catch {
+      // Fallback: save base64 if upload fails
+      if (mode === 'dark') updateCommunity({ bannerDark: croppedDataUrl });
+      else updateCommunity({ bannerLight: croppedDataUrl });
+    }
   }
 
   function removeBannerDark()  { updateCommunity({ bannerDark:  null }); }
@@ -256,7 +268,7 @@ export default function SettingsTab() {
     e.preventDefault();
     setPwErr(''); setPwOk('');
     if (pw.current !== adminPassword)  { setPwErr('Current password is incorrect.'); return; }
-    if (pw.newPw.length < 4)           { setPwErr('New password must be at least 4 characters.'); return; }
+    if (pw.newPw.length < 8)           { setPwErr('New password must be at least 8 characters.'); return; }
     if (pw.newPw !== pw.confirm)       { setPwErr('Passwords do not match.'); return; }
     changeAdminPassword(pw.newPw);
     setPw({ current: '', newPw: '', confirm: '' });
@@ -473,7 +485,7 @@ export default function SettingsTab() {
             type="password"
             value={pw.newPw}
             onChange={e => setPw(f => ({ ...f, newPw: e.target.value }))}
-            placeholder="Min 4 characters"
+            placeholder="Min 8 characters"
             autoComplete="new-password"
           />
           <Input

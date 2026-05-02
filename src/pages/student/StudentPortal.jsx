@@ -33,14 +33,20 @@ function LoginForm({ onShowRegister }) {
   const { loginStudent, loginAdmin }                    = useAuth();
   const { students, adminUsername, loginAdmin: checkAdminPassword } = useApp();
   const navigate = useNavigate();
-  const [username, setU]   = useState('');
-  const [password, setP]   = useState('');
-  const [error, setError]  = useState('');
-  const [loading, setLoading] = useState(false);
+  const [username,  setU]        = useState('');
+  const [password,  setP]        = useState('');
+  const [error,     setError]    = useState('');
+  const [loading,   setLoading]  = useState(false);
+  const [failCount, setFailCount] = useState(0);
+  const [lockUntil, setLockUntil] = useState(0);
 
   async function submit(e) {
     e.preventDefault();
     setError('');
+    if (Date.now() < lockUntil) {
+      setError(`Too many attempts. Wait ${Math.ceil((lockUntil - Date.now()) / 1000)}s.`);
+      return;
+    }
     if (!username.trim() || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
 
@@ -53,7 +59,11 @@ function LoginForm({ onShowRegister }) {
 
     try {
       await loginStudent(username.trim(), password);
+      setFailCount(0);
     } catch (err) {
+      const newCount = failCount + 1;
+      setFailCount(newCount);
+      if (newCount >= 5) setLockUntil(Date.now() + 30_000);
       setError('Incorrect username or password.');
     } finally {
       setLoading(false);
@@ -123,7 +133,7 @@ function RegisterForm({ onShowLogin }) {
     const errs = {};
     if (!form.fullName.trim()) errs.fullName = 'Required';
     if (!form.username.trim() || form.username.length < 3) errs.username = 'Min 3 characters';
-    if (form.password.length < 4) errs.password = 'Min 4 characters';
+    if (form.password.length < 8) errs.password = 'Min 8 characters';
     if (!form.phone.trim()) errs.phone = 'Phone number is required';
     if (!form.code.trim()) errs.code = 'Required';
     if (Object.keys(errs).length) { setErrors(errs); return; }
@@ -196,7 +206,7 @@ function RegisterForm({ onShowLogin }) {
             value={form.password}
             onChange={set('password')}
             error={errors.password}
-            placeholder="Min 4 characters"
+            placeholder="Min 8 characters"
             autoComplete="new-password"
           />
           <Input
