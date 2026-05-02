@@ -279,7 +279,7 @@ export async function loadAll() {
     community,
     groups,
   ] = await Promise.all([
-    supabase.from('students').select('*'),
+    supabase.from('students').select('id, full_name, username, group_id, secondary_group_ids, status, university, phone, avatar, tasbih_count, tasbih, personal_tasbih_progress, personal_tasbihs, telegram_username, preferred_language'),
     supabase.from('submissions').select('*'),
     supabase.from('bonus_points').select('*'),
     supabase.from('books').select('*'),
