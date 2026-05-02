@@ -908,7 +908,9 @@ export function AppProvider({ children }) {
       loading, dbError, reload,
       // State
       community, groups, students, activities, periods,
-      registrationMode, adminPassword, adminUsername, allowPastSubmissions,
+      registrationMode, adminUsername, allowPastSubmissions,
+      // Password is kept private — use loginAdmin(pw) to verify
+      loginAdmin: (pw) => pw === adminPassword,
       globalTasbihs, programs, programsLabel, personalTasbihTemplates,
       collectiveTaskCounts,
       // Computed helpers (synchronous, read from state)

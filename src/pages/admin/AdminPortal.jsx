@@ -37,14 +37,14 @@ function getInitialCollapsed() {
 
 // ─── Login form ────────────────────────────────────────────────────
 function LoginForm() {
-  const { loginAdmin }    = useAuth();
-  const { adminPassword } = useApp();
+  const { loginAdmin: authLoginAdmin }        = useAuth();
+  const { loginAdmin: checkAdminPassword }    = useApp();
   const [pw,  setPw]  = useState('');
   const [err, setErr] = useState('');
 
   function submit(e) {
     e.preventDefault();
-    if (pw === adminPassword) { loginAdmin(); }
+    if (checkAdminPassword(pw)) { authLoginAdmin(); }
     else { setErr('Incorrect password.'); }
   }
 

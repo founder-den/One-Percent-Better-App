@@ -30,8 +30,8 @@ function AuthBanner({ title, subtitle }) {
 
 // ─── Auth forms ───────────────────────────────────────────────────
 function LoginForm({ onShowRegister }) {
-  const { loginStudent, loginAdmin } = useAuth();
-  const { students, adminUsername, adminPassword } = useApp();
+  const { loginStudent, loginAdmin }                    = useAuth();
+  const { students, adminUsername, loginAdmin: checkAdminPassword } = useApp();
   const navigate = useNavigate();
   const [username, setU]   = useState('');
   const [password, setP]   = useState('');
@@ -45,7 +45,7 @@ function LoginForm({ onShowRegister }) {
     setLoading(true);
 
     // Silent admin check — no visible difference to the user
-    if (username.trim() === adminUsername && password === adminPassword) {
+    if (username.trim() === adminUsername && checkAdminPassword(password)) {
       loginAdmin();
       navigate('/admin', { replace: true });
       return; // component navigates away, loading state is irrelevant

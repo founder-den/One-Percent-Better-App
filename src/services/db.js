@@ -626,6 +626,7 @@ export async function dbUpdateStudent(id, fields) {
   console.log('[db] updateStudent:', id, Object.keys(fields));
   const row = {};
   if (fields.fullName          !== undefined) row.full_name           = fields.fullName;
+  if (fields.password          !== undefined) row.password            = fields.password;
   if (fields.username          !== undefined) row.username            = fields.username;
   if (fields.groupId           !== undefined) row.group_id            = fields.groupId;
   if (fields.secondaryGroupIds !== undefined) row.secondary_group_ids = fields.secondaryGroupIds;

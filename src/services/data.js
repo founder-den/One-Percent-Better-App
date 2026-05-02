@@ -58,11 +58,29 @@ export function saveTheme(t) { try { localStorage.setItem(THEME_KEY, t); } catch
 
 // ─── Session (still localStorage — persists across page reloads) ──
 const SESSION_STUDENT_KEY = 'currentStudent';
-const SESSION_ADMIN_KEY   = 'adminSession';
+const ADMIN_TOKEN_KEY     = 'adminToken';
 
-export function getSessionUsername()     { try { return localStorage.getItem(SESSION_STUDENT_KEY) || null; } catch { return null; } }
-export function setSessionUsername(u)    { try { localStorage.setItem(SESSION_STUDENT_KEY, u); } catch { /* ignore */ } }
-export function clearSessionUsername()   { try { localStorage.removeItem(SESSION_STUDENT_KEY); } catch { /* ignore */ } }
-export function getAdminSession()        { try { return localStorage.getItem(SESSION_ADMIN_KEY) === 'true'; } catch { return false; } }
-export function setAdminSession(v)       { try { localStorage.setItem(SESSION_ADMIN_KEY, String(v)); } catch { /* ignore */ } }
-export function clearAdminSession()      { try { localStorage.removeItem(SESSION_ADMIN_KEY); } catch { /* ignore */ } }
+export function getSessionUsername()   { try { return localStorage.getItem(SESSION_STUDENT_KEY) || null; } catch { return null; } }
+export function setSessionUsername(u)  { try { localStorage.setItem(SESSION_STUDENT_KEY, u); } catch { /* ignore */ } }
+export function clearSessionUsername() { try { localStorage.removeItem(SESSION_STUDENT_KEY); } catch { /* ignore */ } }
+
+export function setAdminSession() {
+  const token   = crypto.randomUUID();
+  const expires = Date.now() + 8 * 60 * 60 * 1000; // 8 hours
+  try { localStorage.setItem(ADMIN_TOKEN_KEY, JSON.stringify({ token, expires })); } catch { /* ignore */ }
+  return token;
+}
+
+export function getAdminSession() {
+  try {
+    const raw = localStorage.getItem(ADMIN_TOKEN_KEY);
+    if (!raw) return false;
+    const { token, expires } = JSON.parse(raw);
+    if (Date.now() > expires) { clearAdminSession(); return false; }
+    return !!token;
+  } catch { return false; }
+}
+
+export function clearAdminSession() {
+  try { localStorage.removeItem(ADMIN_TOKEN_KEY); } catch { /* ignore */ }
+}
