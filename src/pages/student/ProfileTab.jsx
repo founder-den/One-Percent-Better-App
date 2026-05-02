@@ -6,6 +6,7 @@ import {
 } from '../../components/ui.jsx';
 import { Camera, Check, X, Info } from 'lucide-react';
 import { supabase } from '../../services/supabase.js';
+import { dbUploadAvatar } from '../../services/db.js';
 
 // ─── Avatar upload with camera overlay ────────────────────────────
 function AvatarUpload({ avatar, name, onChange }) {
@@ -15,9 +16,7 @@ function AvatarUpload({ avatar, name, onChange }) {
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => onChange(ev.target.result);
-    reader.readAsDataURL(file);
+    onChange(file);
     e.target.value = '';
   }
 
@@ -92,9 +91,15 @@ export default function ProfileTab() {
     setSaved(false); setErr('');
   }
 
-  async function handleAvatarChange(dataUrl) {
-    setAvatar(dataUrl);
-    await updateStudent(student.id, { avatar: dataUrl });
+  async function handleAvatarChange(file) {
+    setErr('');
+    try {
+      const url = await dbUploadAvatar(student.id, file);
+      setAvatar(url);
+      await updateStudent(student.id, { avatar: url });
+    } catch {
+      setErr('Failed to upload photo. Please try again.');
+    }
   }
 
   async function handleChangePassword(e) {
@@ -129,9 +134,7 @@ export default function ProfileTab() {
                 onChange={e => {
                   const file = e.target.files[0];
                   if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => handleAvatarChange(ev.target.result);
-                  reader.readAsDataURL(file);
+                  handleAvatarChange(file);
                   e.target.value = '';
                 }}
               />

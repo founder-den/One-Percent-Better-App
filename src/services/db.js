@@ -1211,6 +1211,19 @@ export async function dbDeleteAnnouncement(id) {
   return true;
 }
 
+// Uploads an avatar File to Supabase Storage and returns its public URL.
+// The bucket must be public and created in the Supabase dashboard (or via SQL).
+export async function dbUploadAvatar(studentId, file) {
+  const ext = file.name.split('.').pop() || 'jpg';
+  const path = `${studentId}/avatar.${ext}`;
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) throw error;
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export async function dbUploadAnnouncementFile(file) {
   const fileExt = file.name.split('.').pop();
   const fileName = `announcement_${Date.now()}.${fileExt}`;

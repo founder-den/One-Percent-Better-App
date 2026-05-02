@@ -3,7 +3,7 @@ import { generateId, todayString, setSessionUsername } from '../services/data.js
 import { checkAndResetTasbih } from '../services/calculations.js';
 import {
   loadAll,
-  dbEnsureCommunity, dbLoadCommunity, dbLoadGroups,
+  dbEnsureCommunity,
   dbSaveCommunity,
   dbSaveAdminSettings,
   dbAddGroup, dbUpdateGroup,
@@ -70,14 +70,10 @@ export function AppProvider({ children }) {
     try {
       // Ensure community row exists in Supabase before any other writes
       await dbEnsureCommunity();
-      // Community and groups fetched directly from Supabase (fall back to localStorage)
-      const [community, groups, data] = await Promise.all([
-        dbLoadCommunity(),
-        dbLoadGroups(),
-        loadAll(),
-      ]);
-      setCommunity(community);
-      setGroups(groups);
+      // loadAll() already fetches community and groups — no duplicate calls needed
+      const data = await loadAll();
+      setCommunity(data.community);
+      setGroups(data.groups);
       setAdminUsername(data.adminSettings.adminUsername);
       setAdminPassword(data.adminSettings.adminPassword);
       setRegModeState(data.adminSettings.registrationMode);

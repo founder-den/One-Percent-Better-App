@@ -286,6 +286,58 @@ ALTER TABLE public.announcements
 ADD COLUMN IF NOT EXISTS title text DEFAULT '';
 
 
+-- ─── Storage: avatars bucket ─────────────────────────────────────────
+-- Run once in the Supabase SQL Editor. Creates a public bucket for student
+-- avatar images so the app stores a short URL instead of a base64 string.
+
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('avatars', 'avatars', true)
+  ON CONFLICT DO NOTHING;
+
+DROP POLICY IF EXISTS "avatars_anon_select" ON storage.objects;
+DROP POLICY IF EXISTS "avatars_anon_insert" ON storage.objects;
+DROP POLICY IF EXISTS "avatars_anon_update" ON storage.objects;
+
+CREATE POLICY "avatars_anon_select" ON storage.objects
+  FOR SELECT TO anon USING (bucket_id = 'avatars');
+
+CREATE POLICY "avatars_anon_insert" ON storage.objects
+  FOR INSERT TO anon WITH CHECK (bucket_id = 'avatars');
+
+CREATE POLICY "avatars_anon_update" ON storage.objects
+  FOR UPDATE TO anon USING (bucket_id = 'avatars');
+
+
+-- ─── Security: Enable RLS on pre-existing tables ─────────────────────
+-- These tables were created before this schema file existed so they have
+-- no RLS policies. Run this block ONCE in the Supabase SQL Editor.
+-- Without RLS, the Supabase REST API returns rows to any HTTP request.
+
+-- students
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all" ON students;
+CREATE POLICY "anon_all" ON students FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON students TO anon;
+
+-- groups
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all" ON groups;
+CREATE POLICY "anon_all" ON groups FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON groups TO anon;
+
+-- communities
+ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all" ON communities;
+CREATE POLICY "anon_all" ON communities FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON communities TO anon;
+
+-- announcements (table was created outside this file; RLS was never added)
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_all" ON announcements;
+CREATE POLICY "anon_all" ON announcements FOR ALL TO anon USING (true) WITH CHECK (true);
+GRANT ALL ON announcements TO anon;
+
+
 -- ─── Migrate existing students → Ramadan Challenge ────────────────────
 -- Run this in Supabase SQL Editor to add all existing students as members
 -- of the Ramadan Challenge automatically:
