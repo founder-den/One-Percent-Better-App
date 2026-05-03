@@ -3,6 +3,7 @@ import {
   getAdminSession, setAdminSession, clearAdminSession,
   getSessionUsername, setSessionUsername, clearSessionUsername,
 } from '../services/data.js';
+import { supabase } from '../services/supabase.js';
 import { useApp } from './AppContext.jsx';
 
 const AuthContext = createContext(null);
@@ -19,13 +20,16 @@ export function AuthProvider({ children }) {
 
   // ── Student auth ─────────────────────────────────────────────
   const loginStudent = useCallback(async (username, password) => {
-    const found = students.find(
-      s => s.username.toLowerCase() === username.toLowerCase().trim() && s.password === password
-    );
-    if (!found) throw new Error('Invalid username or password');
-    setSessionUsername(found.username);
-    setCurrentUsername(found.username);
-  }, [students]);
+    const { data } = await supabase
+      .from('students')
+      .select('id, username, password')
+      .eq('username', username.trim())
+      .single();
+
+    if (!data || data.password !== password) throw new Error('Invalid username or password');
+    setSessionUsername(data.username);
+    setCurrentUsername(data.username);
+  }, []);
 
   // Called after registration when the new student isn't in the array yet
   const loginStudentDirectly = useCallback((username) => {
