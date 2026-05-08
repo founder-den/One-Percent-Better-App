@@ -667,7 +667,7 @@ export async function dbSubmitDay(studentId, dateStr, completedActivities, quote
     if (activePeriod.startDate && today < activePeriod.startDate) {
       throw new Error('This period has not started yet');
     }
-    if (activePeriod.endDate && today > activePeriod.endDate) {
+    if (activePeriod.endDate && dateStr > activePeriod.endDate) {
       throw new Error('This period has already ended. Submissions are closed.');
     }
     if (activePeriod.startDate && dateStr < activePeriod.startDate) {
